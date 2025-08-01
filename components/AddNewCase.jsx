@@ -126,7 +126,7 @@ export default function AddNewCase() {
     }
 
     try {
-      const response = await fetch("http://localhost:9999/api/uploadDocs", {
+      const response = await fetch("https://sourcecorp.in/api/uploadDocs", {
         method: "POST",
         body: formData,
       });
@@ -203,7 +203,7 @@ export default function AddNewCase() {
 
     try {
       const response = await fetch(
-        `http://localhost:9999/api/logs/pfile/insert`,
+        `https://sourcecorp.in/api/logs/pfile/insert`,
         {
           method: "POST",
           mode: "cors",
@@ -259,7 +259,7 @@ export default function AddNewCase() {
       let iv = EM[i]["iv"];
 
       try {
-        const response = await fetch(`http://localhost:9999/api/insert/k`, {
+        const response = await fetch(`https://sourcecorp.in/api/insert/k`, {
           method: "POST",
           mode: "cors",
           headers: {
@@ -333,7 +333,7 @@ export default function AddNewCase() {
     formData.append("case_pindex", casePIndex);
 
     try {
-      const response = await fetch("http://localhost:9999/upload", {
+      const response = await fetch("https://sourcecorp.in/upload", {
         method: "POST",
         body: pindex,
         email,
@@ -404,7 +404,7 @@ export default function AddNewCase() {
       const unknown1 = customer.unknown1;
       const caseDate = formattedDate;
       const response = await fetch(
-        `http://localhost:9999/api/userFile/insert`,
+        `https://sourcecorp.in/api/userFile/insert`,
         {
           method: "POST",
           mode: "cors",
@@ -438,7 +438,7 @@ export default function AddNewCase() {
     try {
       const id = parseInt(userid);
       const no_of_files = parseInt(nofff);
-      const response = await fetch(`http://localhost:9999/api/updateNofiles`, {
+      const response = await fetch(`https://sourcecorp.in/api/updateNofiles`, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
@@ -448,7 +448,7 @@ export default function AddNewCase() {
         }),
       });
       if (response.ok) {
-        const userResponse = await fetch("http://localhost:9999/api/user", {
+        const userResponse = await fetch("https://sourcecorp.in/api/user", {
           method: "GET",
           credentials: "include",
         });

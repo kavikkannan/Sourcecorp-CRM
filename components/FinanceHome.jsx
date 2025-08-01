@@ -70,7 +70,7 @@ export default function HomePage() {
     const useri = sessionStorage.getItem("userId");
     try {
       const response = await fetch(
-        `http://localhost:9999/api/fetch/notify/${useri}`
+        `https://sourcecorp.in/api/fetch/notify/${useri}`
       );
 
       if (response.status === 404) {
@@ -167,7 +167,7 @@ export default function HomePage() {
 
   const handellogout = async () => {
     try {
-      const response = await fetch(`http://localhost:9999/api/logout`, {
+      const response = await fetch(`https://sourcecorp.in/api/logout`, {
         method: "POST",
         mode: "cors",
         headers: {
@@ -214,7 +214,7 @@ export default function HomePage() {
     handleGetAppointedMembers();
 
     try {
-      const userResponse = await fetch("http://localhost:9999/api/user", {
+      const userResponse = await fetch("https://sourcecorp.in/api/user", {
         method: "GET",
         credentials: "include",
       });
@@ -258,7 +258,7 @@ export default function HomePage() {
 
       const responses = await Promise.all(
         pi.map((pindex) =>
-          fetch(`http://localhost:9999/api/userFile/fetch/${pindex}`)
+          fetch(`https://sourcecorp.in/api/userFile/fetch/${pindex}`)
         )
       );
 
@@ -313,7 +313,7 @@ export default function HomePage() {
     try {
       // Fetch appointed members
       const response = await fetch(
-        `http://localhost:9999/api/appointedUser/${userId}`
+        `https://sourcecorp.in/api/appointedUser/${userId}`
       );
 
       if (!response.ok) {
@@ -348,7 +348,7 @@ export default function HomePage() {
       // Fetch details for each unique user ID
       const userDetails = await Promise.all(
         userIds.map(async (id) => {
-          const userRes = await fetch(`http://localhost:9999/api/user/${id}`);
+          const userRes = await fetch(`https://sourcecorp.in/api/user/${id}`);
           if (userRes.ok) {
             return await userRes.json();
           }
@@ -368,7 +368,7 @@ export default function HomePage() {
       const appointedCases = await userIds.reduce(async (accPromise, id) => {
         const acc = await accPromise;
         const userRes = await fetch(
-          `http://localhost:9999/api/userFile/fetchbyid/${id}`
+          `https://sourcecorp.in/api/userFile/fetchbyid/${id}`
         );
 
         if (userRes.ok) {
@@ -417,7 +417,7 @@ export default function HomePage() {
   const updateNotifyStatus = async (id, readStatus, mark) => {
     try {
       const response = await fetch(
-        `http://localhost:9999/api/userFile/updateNotifyStatus`,
+        `https://sourcecorp.in/api/userFile/updateNotifyStatus`,
         {
           method: "POST",
           mode: "cors",
