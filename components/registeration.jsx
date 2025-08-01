@@ -36,7 +36,7 @@ export default function Reg() {
         appointed_members:"" // Ensure it's an array
       };
   
-      const response = await fetch(`http://backend:9999/api/register`, {
+      const response = await fetch(`https://sourcecorp.in/api/register`, {
         method: "POST",
         mode: "cors",
         headers: {
