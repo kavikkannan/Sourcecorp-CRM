@@ -12,7 +12,7 @@ export default function UserManagement() {
     const fetchUsers = async () => {
       if (role) {
         try {
-          const response = await fetch(`https://sourcecorp.in/api/users/${role}`);
+          const response = await fetch(`https://vfinserv.in/api/users/${role}`);
 
           if (response.ok) {
             const data = await response.json();
@@ -38,7 +38,7 @@ export default function UserManagement() {
   useEffect(() => {
     const fetchAllUsers = async () => {
       try {
-        const response = await fetch("https://sourcecorp.in/api/all-users");
+        const response = await fetch("https://vfinserv.in/api/all-users");
 
         if (response.ok) {
           const data = await response.json();
@@ -66,7 +66,7 @@ export default function UserManagement() {
       const existingMembers = user.AppointedMembers.length > 0 ? user.AppointedMembers.join(",") : "";
       const updatedMembers = existingMembers ? `${existingMembers},${AppointedUserID}` : AppointedUserID;
 
-      const response = await fetch("https://sourcecorp.in/api/appoint", {
+      const response = await fetch("https://vfinserv.in/api/appoint", {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },

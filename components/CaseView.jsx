@@ -80,7 +80,7 @@ export default function ViewCase() {
     try {
       // Fetch schedule data
       const response = await fetch(
-        `https://sourcecorp.in/api/schedule/${userId}`
+        `https://vfinserv.in/api/schedule/${userId}`
       );
       if (response.ok) {
         const data = await response.json(); // Await the JSON response
@@ -100,7 +100,7 @@ export default function ViewCase() {
         // Fetch details for each unique user ID
         const userDetails = await Promise.all(
           userIds.map(async (id) => {
-            const userRes = await fetch(`https://sourcecorp.in/api/user/${id}`);
+            const userRes = await fetch(`https://vfinserv.in/api/user/${id}`);
             if (userRes.ok) {
               return await userRes.json(); // Return user details
             }
@@ -152,7 +152,7 @@ export default function ViewCase() {
       const mark = false;
       const readStatus = false;
 
-      const response = await fetch(`https://sourcecorp.in/api/insert/notify`, {
+      const response = await fetch(`https://vfinserv.in.in/api/insert/notify`, {
         method: "POST",
         mode: "cors",
         headers: {
@@ -295,7 +295,7 @@ export default function ViewCase() {
   async function getCaseFiles(pindex) {
     try {
       const response = await fetch(
-        `https://sourcecorp.in/api/get-docs/${pindex}`
+        `https://vfinserv.in/api/get-docs/${pindex}`
       );
 
       if (!response.ok) {
@@ -410,7 +410,7 @@ export default function ViewCase() {
 
     try {
       const response = await fetch(
-        `https://sourcecorp.in/api/logs/pfile/insert`,
+        `https://vfinserv.in/api/logs/pfile/insert`,
         {
           method: "POST",
           mode: "cors",
@@ -468,7 +468,7 @@ export default function ViewCase() {
       let iv = EM[i]["iv"];
 
       try {
-        const response = await fetch(`https://sourcecorp.in/api/insert/k`, {
+        const response = await fetch(`https://vfinserv.in/api/insert/k`, {
           method: "POST",
           mode: "cors",
           headers: {
@@ -500,7 +500,7 @@ export default function ViewCase() {
       console.log("updation started");
 
       const response = await fetch(
-        `https://sourcecorp.in/api/userFile/updateStatus`,
+        `https://vfinserv.in/api/userFile/updateStatus`,
         {
           method: "POST",
           mode: "cors",
@@ -553,7 +553,7 @@ export default function ViewCase() {
     let PFileIV = "";
     try {
       const response = await fetch(
-        `https://sourcecorp.in/api/logs/pfile/fetch/${pi}`
+        `https://vfinserv.in/api/logs/pfile/fetch/${pi}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -603,7 +603,7 @@ export default function ViewCase() {
     for (let i = 0; i < fragLength; i++) {
       try {
         const response = await fetch(
-          `https://sourcecorp.in/api/fetch/k/${EI[i]}`
+          `https://vfinserv.in/api/fetch/k/${EI[i]}`
         );
         if (response.ok) {
           const data = await response.json();
@@ -688,7 +688,7 @@ export default function ViewCase() {
     }
 
     try {
-      const response = await fetch("https://sourcecorp.in/api/uploadDocs", {
+      const response = await fetch("https://vfinserv.in/api/uploadDocs", {
         method: "POST",
         body: formData,
       });

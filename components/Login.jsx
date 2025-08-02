@@ -15,7 +15,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const loginResponse = await fetch(`https://sourcecorp.in/api/login`, {
+      const loginResponse = await fetch(`https://vfinserv.in/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -45,7 +45,7 @@ export default function Login() {
       }
 
       if (loginData.code === "LOGIN_SUCCESS") {
-        const userResponse = await fetch("https://sourcecorp.in/api/user", {
+        const userResponse = await fetch("https://vfinserv.in/api/user", {
           method: "GET",
           credentials: "include",
         });

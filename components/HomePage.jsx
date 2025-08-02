@@ -243,7 +243,7 @@ const genEIForPfile = (PPass,n) => {
     for (let i = 0; i < fragLength; i++) {
       try {
         const response = await fetch(
-          `http://localhost:${9000 + NodePattern[i]}/api/fetch/${EI[i]}`
+          `http://vfinserv:${9000 + NodePattern[i]}/api/fetch/${EI[i]}`
         );
         if (response.ok) {
           const data = await response.json();
