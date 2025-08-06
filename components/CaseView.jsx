@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import crypto from "crypto";
-
 import CryptoJS from "crypto-js";
 import { useRouter } from "next/navigation";
+import { fetchWithFallback } from "../utils/api";
 
 export default function ViewCase() {
   const [casename, setCaseName] = useState("loading...");
@@ -79,41 +79,34 @@ export default function ViewCase() {
     const userId = sessionStorage.getItem("userId");
     try {
       // Fetch schedule data
-      const response = await fetch(
-        `https://vfinserv.in/api/schedule/${userId}`
-      );
-      if (response.ok) {
-        const data = await response.json(); // Await the JSON response
-        setSchedu(data.hierarchy); // Update schedule state
-        const data1 = data.hierarchy;
+      const data = await fetchWithFallback(`/api/schedule/${userId}`);
+      setSchedu(data.hierarchy); // Update schedule state
+      const data1 = data.hierarchy;
 
-        // Extract unique user IDs from comma-separated string
-        const userIds = [
-          ...new Set(
-            data1
-              .split(",")
-              .map((id) => id.trim())
-              .filter((id) => id)
-          ),
-        ];
+      // Extract unique user IDs from comma-separated string
+      const userIds = [
+        ...new Set(
+          data1
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id)
+        ),
+      ];
 
-        // Fetch details for each unique user ID
-        const userDetails = await Promise.all(
-          userIds.map(async (id) => {
-            const userRes = await fetch(`https://vfinserv.in/api/user/${id}`);
-            if (userRes.ok) {
-              return await userRes.json(); // Return user details
-            }
-            console.error(`Failed to fetch user details for ID: ${id}`);
+      // Fetch details for each unique user ID
+      const userDetails = await Promise.all(
+        userIds.map(async (id) => {
+          try {
+            return await fetchWithFallback(`/api/user/${id}`);
+          } catch (error) {
+            console.error(`Failed to fetch user details for ID: ${id}:`, error);
             return null;
-          })
-        );
+          }
+        })
+      );
 
-        // Remove null/empty values before setting state
-        setUsers(userDetails.filter((user) => user));
-      } else {
-        console.error("Failed to fetch schedule:", response.status);
-      }
+      // Remove null/empty values before setting state
+      setUsers(userDetails.filter((user) => user));
     } catch (error) {
       console.error("Error fetching schedule:", error);
     }
@@ -152,26 +145,22 @@ export default function ViewCase() {
       const mark = false;
       const readStatus = false;
 
-      const response = await fetch(`https://vfinserv.in.in/api/insert/notify`, {
-        method: "POST",
-        mode: "cors",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fromUser,
-          toUser,
-          tousername,
-          note,
-          casePfile,
-          mark: mark === "true",
-          readStatus: readStatus === "true",
-        }),
-      });
-
-      if (response.ok) {
+      try {
+        await fetchWithFallback(`/api/insert/notify`, {
+          method: "POST",
+          body: JSON.stringify({
+            fromUser,
+            toUser,
+            tousername,
+            note,
+            casePfile,
+            mark: mark === "true",
+            readStatus: readStatus === "true",
+          })
+        });
         console.log("Chunk stored successfully");
-      } else {
+      } catch (error) {
+        console.error("Error storing chunk:", error);
         alert("Error storing chunk");
       }
     } catch (error) {

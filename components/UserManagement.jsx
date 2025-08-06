@@ -2,17 +2,27 @@
 
 import { useState, useEffect } from "react";
 
+// Base URL for all admin API calls
+const BASE_URL = "https://vfinserv.in"; // Changed from 9999 and stopped using fetchWithFallback
+
 export default function UserManagement() {
   const [role, setRole] = useState(""); // Selected role filter
   const [users, setUsers] = useState([]); // Users with selected role
   const [allUsers, setAllUsers] = useState([]); // All appointable users
+  const [selectedMembers, setSelectedMembers] = useState({}); // Track selected member for each user
 
   // Fetch users based on role
   useEffect(() => {
     const fetchUsers = async () => {
       if (role) {
         try {
-          const response = await fetch(`https://vfinserv.in/api/users/${role}`);
+          const response = await fetch(`${BASE_URL}/api/users/${role}`,{
+            method:"GET",
+            headers:{
+              "Content-Type":"application/json"
+            },
+            credentials:"include"
+          });
 
           if (response.ok) {
             const data = await response.json();
@@ -38,13 +48,19 @@ export default function UserManagement() {
   useEffect(() => {
     const fetchAllUsers = async () => {
       try {
-        const response = await fetch("https://vfinserv.in/api/all-users");
+        const response = await fetch(`${BASE_URL}/api/all-users` ,{
+          method:"GET",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          credentials:"include"
+        });
 
         if (response.ok) {
           const data = await response.json();
           setAllUsers(data);
         } else {
-          console.error("Failed to fetch all users");
+          console.error("Failed to fetch all users",response);
         }
       } catch (error) {
         console.error("Error fetching all users:", error);
@@ -56,6 +72,7 @@ export default function UserManagement() {
 
   const allUsersMap = Object.fromEntries(allUsers.map(user => [String(user.ID), user]));
 
+  // Appoint a new member to the user
   const handleAppoint = async (UserID, AppointedUserID) => {
     if (!AppointedUserID) return;
 
@@ -66,10 +83,11 @@ export default function UserManagement() {
       const existingMembers = user.AppointedMembers.length > 0 ? user.AppointedMembers.join(",") : "";
       const updatedMembers = existingMembers ? `${existingMembers},${AppointedUserID}` : AppointedUserID;
 
-      const response = await fetch("https://vfinserv.in/api/appoint", {
+      const response = await fetch(`${BASE_URL}/api/appoint`, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
+        credentials:"include",
         body: JSON.stringify({ 
           UserID: String(UserID), 
           AppointedMembers: updatedMembers 
@@ -84,6 +102,11 @@ export default function UserManagement() {
               : user
           )
         );
+        // Reset the selected member for this user
+        setSelectedMembers(prev => ({
+          ...prev,
+          [UserID]: ""
+        }));
       } else {
         console.error("Failed to appoint member");
       }
@@ -92,13 +115,47 @@ export default function UserManagement() {
     }
   };
 
+// Remove an already–appointed member
+const handleRemoveAppointed = async (UserID, memberID) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/removeAppointedMember`, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "application/json" },
+      credentials:"include",
+      body: JSON.stringify({
+        UserID: String(UserID),
+        MemberID: String(memberID)
+      })
+    });
+
+    if (response.ok) {
+      // Update the local state to reflect the removal
+      setUsers(prev => prev.map(u => 
+        u.ID === UserID 
+          ? { 
+              ...u, 
+              AppointedMembers: u.AppointedMembers.filter(id => id !== memberID) 
+            } 
+          : u
+      ));
+    } else {
+      const errorData = await response.json();
+      console.error("Failed to remove appointed member:", errorData.message);
+      // Optionally, show an error message to the user
+    }
+  } catch (err) {
+    console.error("Error removing appointed member:", err);
+    // Optionally, show an error message to the user
+  }
+};
   return (
-    <div className="min-h-screen p-8 bg-gradient-to-br from-orange-700 to-purple-900 text-white">
+    <div className="max-h-screen p-4 md:p-8 ">
       {/* Role Filter Dropdown */}
-      <div className="bg-white p-6 shadow-md rounded-lg mb-6 max-w-lg mx-auto text-gray-900">
-        <label className="block text-lg font-semibold mb-2">Filter by Role:</label>
+      <div className="bg-white p-4 md:p-6 shadow rounded-xl mb-8 max-w-lg mx-auto text-gray-900 border border-blue-100">
+        <label className="block text-base md:text-lg font-semibold mb-2 text-blue-800">Filter by Role:</label>
         <select
-          className="p-3 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="p-3 border border-blue-300 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
           value={role}
           onChange={(e) => setRole(e.target.value)}
         >
@@ -116,22 +173,29 @@ export default function UserManagement() {
       {/* Display Users */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {users.map(user => (
-          <div key={user.ID} className="bg-white p-6 border rounded-lg shadow-lg hover:shadow-xl transition-shadow text-gray-900">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-xl font-semibold">{user.Name}</h2>
-              <span className="text-sm px-3 py-1 bg-blue-200 text-blue-700 rounded-full">{user.Role}</span>
+          <div key={user.ID} className="bg-white p-5 border border-blue-100 rounded-xl shadow hover:shadow-lg transition-shadow text-gray-900 flex flex-col">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg md:text-xl font-semibold text-blue-700">{user.Name}</h2>
+              <span className="text-xs md:text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium uppercase tracking-wide">{user.Role}</span>
             </div>
 
             {/* Appoint Members */}
-            <div className="mt-3">
-              <label className="block text-sm font-medium">Appoint Members:</label>
+            <div className="mt-2">
+              <label className="block text-xs md:text-sm font-medium text-blue-700 mb-1">Appoint Members:</label>
               <select
-                className="p-2 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-green-400"
-                onChange={(e) => handleAppoint(user.ID, e.target.value)}
+                className="p-2 border border-orange-300 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
+                value={selectedMembers[user.ID] || ""}
+                onChange={(e) => {
+                  setSelectedMembers(prev => ({
+                    ...prev,
+                    [user.ID]: e.target.value
+                  }));
+                  handleAppoint(user.ID, e.target.value);
+                }}
               >
                 <option value="">Select Member</option>
                 {allUsers
-                  .filter(u => u.Role !== user.Role)
+                  .filter(u => u.Role !== user.Role && !user.AppointedMembers.includes(String(u.ID)))
                   .map(member => (
                     <option key={`user-${user.ID}-member-${member.ID}`} value={member.ID}>
                       {member.Name} ({member.Role})
@@ -148,9 +212,17 @@ export default function UserManagement() {
                   {user.AppointedMembers.map((ID, index) => {
                     const member = allUsersMap[ID];
                     return member ? (
-                      <p key={`appointed-${user.ID}-${index}`} className="text-sm text-gray-700">
-                        {member.Name} ({member.Role})
-                      </p>
+                      <div key={`appointed-${user.ID}-${index}`} className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded-md mb-1">
+                        <span className="text-sm text-gray-700 flex-1">
+                          {member.Name} ({member.Role})
+                        </span>
+                        <button
+                          onClick={() => handleRemoveAppointed(user.ID, ID)}
+                          className="ml-2 text-xs text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     ) : null;
                   })}
                 </div>

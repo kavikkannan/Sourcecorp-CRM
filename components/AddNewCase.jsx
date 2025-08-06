@@ -7,6 +7,7 @@ import CryptoJS from "crypto-js";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Loading from "@/components/Loading";
+import { fetchWithFallback } from "../utils/api";
 
 
 export default function AddNewCase() {
@@ -126,21 +127,21 @@ export default function AddNewCase() {
     }
 
     try {
-      const response = await fetch("https://vfinserv.in/api/uploadDocs", {
+      const result = await fetchWithFallback("/api/uploadDocs", {
         method: "POST",
         body: formData,
       });
 
-      const result = await response.json();
-      if (response.ok) {
+      if (result) {
         console.log("Files uploaded successfully!");
       } else {
-        console.log(`Upload failed: ${result.message}`);
+        console.log("Upload failed: No response from server");
       }
     } catch (error) {
-      console.log("Error uploading files");
+      console.error("Error uploading files:", error);
     }
   };
+
   const handleSync = async (e, CasePfile) => {
     if (e) e.preventDefault(); // Prevent form submission
 
@@ -202,14 +203,14 @@ export default function AddNewCase() {
     const pfileiv = PFileIV;
 
     try {
-      const response = await fetch(
-        `https://vfinserv.in/api/logs/pfile/insert`,
+      const response = await fetchWithFallback(
+        `/api/logs/pfile/insert`,
         {
           method: "POST",
-          mode: "cors",
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include",
           body: JSON.stringify({
             eindex,
             pfile,
@@ -218,10 +219,10 @@ export default function AddNewCase() {
         }
       );
 
-      if (response.ok) {
+      if (response) {
         console.log("log file success");
       } else {
-        alert("Not successful");
+        console.error("Failed to store log file");
       }
     } catch (error) {
       console.error("Error storing PFile:", error);
@@ -259,12 +260,12 @@ export default function AddNewCase() {
       let iv = EM[i]["iv"];
 
       try {
-        const response = await fetch(`https://vfinserv.in/api/insert/k`, {
+        const response = await fetchWithFallback(`/api/insert/k`, {
           method: "POST",
-          mode: "cors",
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include",
           body: JSON.stringify({
             eindex,
             emessage,
@@ -403,13 +404,14 @@ export default function AddNewCase() {
       const coustomerDetails = encryptedData;
       const unknown1 = customer.unknown1;
       const caseDate = formattedDate;
-      const response = await fetch(
-        `https://vfinserv.in/api/userFile/insert`,
+
+      // Insert user file
+      const response = await fetchWithFallback(
+        "/api/userFile/insert",
         {
           method: "POST",
-          mode: "cors",
           headers: { "Content-Type": "application/json" },
-
+          credentials: "include",
           body: JSON.stringify({
             pindex,
             Pfile,
@@ -425,53 +427,51 @@ export default function AddNewCase() {
         }
       );
 
-      if (!response.ok) throw new Error(`Failed to store fragment `);
-      if (response.ok) {
+      if (!response) throw new Error("Failed to store case data");
+
+      // Upload files if any
+      if (files && files.length > 0) {
         const files1 = files;
-        const casePIndex = pindex; // Replace with dynamic value
+        const casePIndex = pindex;
         const casename1 = caseName;
-        uploadFiles(casePIndex, casename1, files1);
+        await uploadFiles(casePIndex, casename1, files1);
       }
-    } catch (error) {
-      console.error("Storage error:", error);
-    }
-    try {
-      const id = parseInt(userid);
-      const no_of_files = parseInt(nofff);
-      const response = await fetch(`https://vfinserv.in/api/updateNofiles`, {
+
+      // Update number of files
+      const updateResponse = await fetchWithFallback("/api/updateNofiles", {
         method: "POST",
-        mode: "cors",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
-          id,
-          no_of_files,
+          id: parseInt(userid, 10),
+          no_of_files: parseInt(nofff, 10),
         }),
       });
-      if (response.ok) {
-        const userResponse = await fetch("https://vfinserv.in/api/user", {
-          method: "GET",
-          credentials: "include",
-        });
 
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          sessionStorage.setItem("userId", userData.ID);
-          sessionStorage.setItem("username", userData.Name);
-          sessionStorage.setItem("isAdmin", userData.IsAdmin);
-          sessionStorage.setItem("nofi", userData.NoOfFiles);
-          sessionStorage.setItem("PPass", userData.PPass);
+      if (!updateResponse) {
+        throw new Error("Failed to update file count");
+      }
 
-          router.push("/home");
-        } else {
-          setLoading(false);
-          console.error("Failed to retrieve user information");
-        }
-      } else if (!response.ok) {
-        throw new Error(`Failed to store fragment `);
+      // Get updated user data
+      const userData = await fetchWithFallback("/api/user", {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (userData) {
+        sessionStorage.setItem("userId", userData.ID);
+        sessionStorage.setItem("username", userData.Name);
+        sessionStorage.setItem("isAdmin", userData.IsAdmin);
+        sessionStorage.setItem("nofi", userData.NoOfFiles);
+        sessionStorage.setItem("PPass", userData.PPass);
+        router.push("/home");
+      } else {
+        setLoading(false);
+        console.error("Failed to retrieve user information");
       }
     } catch (error) {
       setLoading(false);
-      console.error("Storage error:", error);
+      console.error("Error in confirmSubmission:", error);
     }
   };
 

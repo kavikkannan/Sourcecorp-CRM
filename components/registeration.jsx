@@ -39,6 +39,7 @@ export default function Reg() {
       const response = await fetch(`https://vfinserv.in/api/register`, {
         method: "POST",
         mode: "cors",
+        credentials:"include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -68,35 +69,26 @@ export default function Reg() {
           <LoadingAnimation />
         </div>
       ) : (
-        <div className="absolute w-full bg-gradient-to-br from-blue-200 to-black flex min-h-full flex-1 flex-col justify-center px-6 py-12 lg:px-8">
-          <div className="relative bottom-20 sm:mx-auto sm:w-full sm:max-w-sm">
-            <h2 className="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-black">
-              Register your account
-            </h2>
-          </div>
-
-          <div className="relative bottom-10 mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-            <form className="space-y-6">
+        <div className="max-h-screen flex flex-col justify-center items-center  px-2 py-8 sm:px-6 lg:px-8">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 md:p-8 border border-blue-100">
+            <h2 className="text-center text-2xl md:text-3xl font-bold leading-9 tracking-tight text-blue-700 mb-6">Register your account</h2>
+            <form className="space-y-5">
               <div>
-                <label htmlFor="email" className="block text-base font-bold leading-6 text-black">
-                  Email address
-                </label>
-                <div className="mt-2">
+                <label htmlFor="email" className="block text-sm md:text-base font-semibold text-blue-700">Email address</label>
+                <div className="mt-1">
                   <input
                     id="email"
                     name="email"
                     type="email"
                     required
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full rounded-md border-0 py-1.5 p-2 text-black shadow-sm ring-1 ring-inset ring-black placeholder:text-black focus:ring-2 focus:ring-inset focus:ring-black sm:text-sm sm:leading-6"
+                    className="block w-full rounded-md border border-blue-300 py-2 px-3 text-black shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400 sm:text-sm"
                   />
                 </div>
               </div>
               
               <div>
-                <label htmlFor="name" className="block text-base font-bold leading-6 text-black">
-                  Username
-                </label>
+                <label htmlFor="name" className="block text-sm md:text-base font-semibold text-blue-700">Username</label>
                 <div className="mt-2">
                   <input
                     id="name"

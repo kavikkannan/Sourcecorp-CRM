@@ -2,6 +2,7 @@
 "use client";
 import { mode } from "crypto-js";
 import React, { useState, useEffect } from "react";
+import { fetchWithFallback } from "../utils/api";
 
 const GUserPage = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -88,26 +89,18 @@ const genEIForPfile = (PPass,n) => {
     const pfile = PFile;
     const pfileiv= PFileIV;
     try {
-      const response = await fetch(
+      const data = await fetchWithFallback(
         `http://localhost:${9000 + noo}/api/pfile/insert`,
         {
           method: "POST",
-          mode: "cors",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             eindex, 
-            pfile, 
+            pfile,
             pfileiv
-          }),
+          })
         }
       );
-      if (response.ok) {
-        alert("appended PFile successfully");
-      } else {
-        alert(" not successful");
-      }
+      console.log("PFile stored successfully:", data);
     } catch (error) {
       console.error("Error fetching encrypted message:", error);
     }
@@ -145,26 +138,18 @@ const genEIForPfile = (PPass,n) => {
       let emessage = EM[i]["encryptedData"];
       let iv = EM[i]["iv"];
       try {
-        const response = await fetch(
+        await fetchWithFallback(
           `http://localhost:${9000 + NodePattern[i]}/api/insert`,
           {
             method: "POST",
-            mode: "cors",
-            headers: {
-              "Content-Type": "application/json",
-            },
             body: JSON.stringify({
               eindex,
               emessage,
               iv,
-            }),
+            })
           }
         );
-        if (response.ok) {
-          console.log("appended successfully");
-        } else {
-          alert(" not successful");
-        }
+        console.log("appended successfully");
       } catch (error) {
         console.error("Error fetching encrypted message:", error);
       }
@@ -193,19 +178,12 @@ const genEIForPfile = (PPass,n) => {
     let PFile = "";
     let PFileIV ="";
     try {
-      const response = await fetch(
+      const data = await fetchWithFallback(
         `http://localhost:${9000 + noo}/api/pfile/fetch/${pi}`
       );
-      if (response.ok) {
-        const data = await response.json();
-
-        // Store the encrypted data and IV in the EM array
-         PFile = data.PFile;
-         PFileIV = data.PFileIv;
-      
-      } else {
-        console.error("Failed to fetch message, status:", response.status);
-      }
+      // Store the encrypted data and IV in the EM array
+      PFile = data.PFile;
+      PFileIV = data.PFileIv;
     } catch (error) {
       console.error("Error fetching encrypted message:", error);
     }
@@ -242,20 +220,14 @@ const genEIForPfile = (PPass,n) => {
     let EM = [];
     for (let i = 0; i < fragLength; i++) {
       try {
-        const response = await fetch(
+        const data = await fetchWithFallback(
           `http://vfinserv:${9000 + NodePattern[i]}/api/fetch/${EI[i]}`
         );
-        if (response.ok) {
-          const data = await response.json();
-
-          // Store the encrypted data and IV in the EM array
-          EM.push({
-            encryptedData: data.EMessage,
-            iv: data.IV,
-          });
-        } else {
-          console.error("Failed to fetch message, status:", response.status);
-        }
+        // Store the encrypted data and IV in the EM array
+        EM.push({
+          encryptedData: data.EMessage,
+          iv: data.IV,
+        });
       } catch (error) {
         console.error("Error fetching encrypted message:", error);
       }

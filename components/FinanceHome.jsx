@@ -6,6 +6,7 @@ import crypto from "crypto";
 import CryptoJS from "crypto-js";
 import Loading from "@/components/Loading";
 import MiniLoadingAnimation from "./MiniLoading";
+import { fetchWithFallback } from "../utils/api";
 
 export default function HomePage() {
   const [username, setUser] = useState(null);
@@ -16,6 +17,7 @@ export default function HomePage() {
   const [userid, setUserID] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
   const [notifications, setNotifications] = useState([]);
   const [schedu, setAPPSchedu] = useState("");
@@ -50,6 +52,8 @@ export default function HomePage() {
       router.push("/login"); // Redirect to login page
     } else {
       setUser(storedUsername);
+      const adminStatus = sessionStorage.getItem("isAdmin") === "true";
+      setIsAdmin(adminStatus);
     }
   }, []);
 
@@ -69,21 +73,13 @@ export default function HomePage() {
   const fetchNotifications = async () => {
     const useri = sessionStorage.getItem("userId");
     try {
-      const response = await fetch(
-        `https://vfinserv.in/api/fetch/notify/${useri}`
-      );
+      const data = await fetchWithFallback(`/api/fetch/notify/${useri}`);
 
-      if (response.status === 404) {
+      if (!data) {
         console.log("No notifications found.");
         setNotifications([]);
         return;
       }
-
-      if (!response.ok) {
-        console.log("Error fetching notifications:", error);
-      }
-
-      const data = await response.json();
 
       const Marked = data.filter(
         (note) => note.Mark === "false" || note.Mark === false
@@ -109,34 +105,25 @@ export default function HomePage() {
   const handelNotifyViewCase = async (NData) => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:9999/api/userFile/fetch/${NData.PIndex}`
-      );
-      if (response.ok) {
-        const data = await response.json();
+      const data = await fetchWithFallback(`/api/userFile/fetch/${NData.PIndex}`);
+      if (data) {
         sessionStorage.setItem("selectedCase", JSON.stringify(data));
-      } else {
-        console.error("Failed to fetch fragment, status:", response.status);
       }
+      
       try {
-        const response = await fetch(
-          `http://localhost:9999/api/user/${parseInt(NData.FromUser)}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          const casePPass = data.PPass;
-
-          sessionStorage.setItem("CasePPass", casePPass);
+        const userData = await fetchWithFallback(`/api/user/${parseInt(NData.FromUser)}`);
+        if (userData) {
+          sessionStorage.setItem("CasePPass", userData.PPass);
         } else {
           setLoading(false);
-          console.error("Failed to fetch fragment, status:", response.status);
+          console.error("Failed to fetch user data");
         }
       } catch (error) {
-        console.error("Error fetching fragment:", error);
+        console.error("Error fetching user data:", error);
         setLoading(false);
       }
     } catch (error) {
-      console.error("Error fetching fragment:", error);
+      console.error("Error fetching case data:", error);
       setLoading(false);
     }
 
@@ -146,20 +133,16 @@ export default function HomePage() {
   const handelViewCase = async (selectedCase) => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:9999/api/user/${parseInt(selectedCase.AgentId)}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const casePPass = data.PPass;
-
-        sessionStorage.setItem("CasePPass", casePPass);
+      const data = await fetchWithFallback(`/api/user/${parseInt(selectedCase.AgentId)}`);
+      if (data) {
+        sessionStorage.setItem("CasePPass", data.PPass);
       } else {
         setLoading(false);
-        console.error("Failed to fetch fragment, status:", response.status);
+        console.error("Failed to fetch user data");
       }
     } catch (error) {
-      console.error("Error fetching fragment:", error);
+      console.error("Error fetching user data:", error);
+      setLoading(false);
     }
     sessionStorage.setItem("selectedCase", JSON.stringify(selectedCase));
     router.push("/casepage");
@@ -167,16 +150,15 @@ export default function HomePage() {
 
   const handellogout = async () => {
     try {
-      const response = await fetch(`https://vfinserv.in/api/logout`, {
+      const response = await fetchWithFallback(`/api/logout`, {
         method: "POST",
-        mode: "cors",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
+        credentials: "include"
       });
 
-      if (response.ok) {
+      if (response) {
         sessionStorage.removeItem("PPass");
         sessionStorage.removeItem("isAdmin");
         sessionStorage.removeItem("loggedinemail");
@@ -214,17 +196,16 @@ export default function HomePage() {
     handleGetAppointedMembers();
 
     try {
-      const userResponse = await fetch("https://vfinserv.in/api/user", {
+      const userData = await fetchWithFallback("/api/user", {
         method: "GET",
-        credentials: "include",
+        credentials: "include"
       });
 
-      if (!userResponse.ok) {
+      if (!userData) {
         console.log("No login found");
         return;
       }
 
-      const userData = await userResponse.json();
       const { Name, PPass: Pass, NoOfFiles: NoFF, ID: id } = userData;
 
       setPPass(Pass);
@@ -312,16 +293,12 @@ export default function HomePage() {
     const userId = sessionStorage.getItem("userId");
     try {
       // Fetch appointed members
-      const response = await fetch(
-        `https://vfinserv.in/api/appointedUser/${userId}`
-      );
+      const data = await fetchWithFallback(`/api/appointedUser/${userId}`);
 
-      if (!response.ok) {
-        console.log("Failed to fetch schedule:", response.status);
+      if (!data) {
+        console.log("Failed to fetch schedule");
         return;
       }
-
-      const data = await response.json();
 
       if (!data.hierarchy || data.hierarchy.trim() === "") {
         console.log("No appointed members found.");
@@ -348,12 +325,12 @@ export default function HomePage() {
       // Fetch details for each unique user ID
       const userDetails = await Promise.all(
         userIds.map(async (id) => {
-          const userRes = await fetch(`https://vfinserv.in/api/user/${id}`);
-          if (userRes.ok) {
-            return await userRes.json();
+          try {
+            return await fetchWithFallback(`/api/user/${id}`);
+          } catch (error) {
+            console.error(`Failed to fetch user details for ID: ${id}`, error);
+            return null;
           }
-          console.error(`Failed to fetch user details for ID: ${id}`);
-          return null;
         })
       );
 
@@ -367,19 +344,14 @@ export default function HomePage() {
       // Fetch cases for each valid user ID and store them under their respective IDs
       const appointedCases = await userIds.reduce(async (accPromise, id) => {
         const acc = await accPromise;
-        const userRes = await fetch(
-          `https://vfinserv.in/api/userFile/fetchbyid/${id}`
-        );
-
-        if (userRes.ok) {
-          const userCases = await userRes.json();
+        try {
+          const userCases = await fetchWithFallback(`/api/userFile/fetchbyid/${id}`);
           if (Array.isArray(userCases) && userCases.length > 0) {
             acc[id] = userCases;
           }
-        } else {
-          console.error(`Failed to fetch cases for user ID: ${id}`);
+        } catch (error) {
+          console.error(`Failed to fetch cases for user ID: ${id}`, error);
         }
-
         return acc;
       }, Promise.resolve({}));
 
@@ -388,7 +360,8 @@ export default function HomePage() {
       setAppointedUsers(validUserDetails);
       setMiniLoading(false);
     } catch (error) {
-      console.error("Error fetching schedule:", error);
+      console.error("Error in handleGetAppointedMembers:", error);
+      setMiniLoading(false);
     }
   };
 
@@ -416,31 +389,25 @@ export default function HomePage() {
 
   const updateNotifyStatus = async (id, readStatus, mark) => {
     try {
-      const response = await fetch(
-        `https://vfinserv.in/api/userFile/updateNotifyStatus`,
-        {
-          method: "POST",
-          mode: "cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id,
-            readStatus:
-              typeof readStatus === "string"
-                ? readStatus === "true"
-                : readStatus,
-            mark: typeof mark === "string" ? mark === "true" : mark,
-          }),
-        }
-      );
-      if (response.ok) {
-        fetchNotifications();
+      const response = await fetchWithFallback(`/api/userFile/updateNotifyStatus`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify({
+          id,
+          readStatus: typeof readStatus === 'string' ? readStatus === 'true' : readStatus,
+          mark: typeof mark === 'string' ? mark === 'true' : mark,
+        }),
+        credentials: "include"
+      });
+
+      if (response) {
+        await fetchNotifications();
+        console.log("Update result:", response);
+      } else {
+        console.error("Failed to update notification status");
       }
-      const result = await response.json();
-
-      console.log("Update result:", result);
-
-      // Optionally re-fetch notifications here
-      // await fetchNotifications();
     } catch (error) {
       console.error("Failed to update notification:", error);
     }
@@ -568,6 +535,14 @@ export default function HomePage() {
                       Notification | {MarkCount} unread | {readCount} ongoing
                     </button>
 
+                    {isAdmin && (
+                      <button
+                        onClick={() => router.push("/adminpanel")}
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-5 py-2 rounded-full shadow-md transition duration-300 hover:from-purple-600 hover:to-purple-700 focus:ring-2 focus:ring-purple-400 mr-2"
+                      >
+                        Admin Panel
+                      </button>
+                    )}
                     <button
                       onClick={handellogout}
                       className="bg-gradient-to-r from-red-500 to-red-600 text-white px-5 py-2 rounded-full shadow-md transition duration-300 hover:from-red-600 hover:to-red-700 focus:ring-2 focus:ring-red-400"
