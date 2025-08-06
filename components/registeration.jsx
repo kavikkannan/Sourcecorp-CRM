@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { fetchWithFallback } from "../utils/api";
 import Link from "next/link";
 import React, { useState } from "react";
 import LoadingAnimation from "@/components/Loading";
@@ -28,25 +29,25 @@ export default function Reg() {
         email,
         password,
         number,
-        is_admin: is_admin === "true", // Convert string to boolean
+        is_admin: is_admin === "true",
         no_of_files: NoOfFiles,
-        branch, // Convert string to number
+        branch,
         role,
         salary,
-        appointed_members:"" // Ensure it's an array
+        appointed_members: ""
       };
   
-      const response = await fetch(`https://vfinserv.in/api/register`, {
+      const response = await fetchWithFallback(`/api/register`, {
         method: "POST",
         mode: "cors",
-        credentials:"include",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
   
-      if (response.ok) {
+      if (response) {
         console.log("User registered successfully");
         router.push("/login");
       } else {

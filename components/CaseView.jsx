@@ -5,281 +5,351 @@ import crypto from "crypto";
 import CryptoJS from "crypto-js";
 import { useRouter } from "next/navigation";
 import { fetchWithFallback } from "../utils/api";
+import { toast } from "react-toastify";
+import Loading from "@/components/Loading";
+
+// Helper for Icons
+const Icon = ({ path }) => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d={path} /></svg>;
+const ChevronDownIcon = () => <Icon path="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z" />;
+const FileIcon = () => <Icon path="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />;
+const DownloadIcon = () => <Icon path="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />;
 
 export default function ViewCase() {
-  const [casename, setCaseName] = useState("loading...");
-
+  const [caseData, setCaseData] = useState(null);
   const [activeTab, setActiveTab] = useState("notes");
   const [entries, setEntries] = useState([]);
   const [input, setInput] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [assignedToName, setAssignedToName] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [username, setUserName] = useState("");
   const [userid, setUserID] = useState("");
-  const [retrievedFile, setRetrievedFile] = useState(null);
-  const [caseData, setCaseData] = useState([]);
+  const [retrievedFiles, setRetrievedFiles] = useState([]);
   const [lastSync, setLastSync] = useState("");
   const [customerDetails, setCustomerDetails] = useState(null);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState(caseData.Status);
-  const [schedu, setSchedu] = useState("");
-  const [alteredCase, setalteredCase] = useState("");
+  const [showStatusEditor, setShowStatusEditor] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isCustomerOpen, setIsCustomerOpen] = useState(true);
   const [isFilesOpen, setIsFilesOpen] = useState(true);
+  const [filesToUpload, setFilesToUpload] = useState([]);
+  const [selectedFilesToDownload, setSelectedFilesToDownload] = useState([]);
+  const [schedu, setSchedu] = useState("");
+  const [files, setfiles] = useState([]);
 
-  const statuses = [
-    "select status",
-    "Login Case",
-    "Underwriting Case",
-    "Approved Case",
-    "Disbursed Case",
-    "Rejected Case",
-  ]; // Example statuses
 
+
+  const statuses = ["Login Case", "Underwriting Case", "Approved Case", "Disbursed Case", "Rejected Case"];
   const router = useRouter();
+
+  // Initial data loading from session storage
   useEffect(() => {
     const storedCase = sessionStorage.getItem("selectedCase");
     const useri = sessionStorage.getItem("userId");
-    const alter = sessionStorage.getItem("alteredSt");
-    if (alter) {
-      setalteredCase(alter);
-    }
+    const name = sessionStorage.getItem("username");
+
     setUserID(useri);
+    setUserName(name);
 
     if (storedCase) {
       try {
         const parsedCase = JSON.parse(storedCase);
-        setCaseData(parsedCase); // ✅ Updates state first
+        setCaseData(parsedCase);
+        setSelectedStatus(parsedCase.Status);
       } catch (error) {
         console.error("Error parsing stored case:", error);
       }
+    } else {
+      router.push("/home"); // Redirect if no case data
     }
-  }, []);
+  }, [router]);
 
-  // ✅ New effect to run handleDecrypt only after caseData is set
+  // Fetches data once caseData is available
   useEffect(() => {
     if (caseData) {
       handleSch();
-      handleDecrypt();
+      handleDecryptLogs();
+      handleFetchCustomerDetails();
+      handleRetrieveAndDecryptFiles();
+      setLastSync(getCurrentTimestamp());
     }
-  }, [caseData]); // ✅ Runs whenever caseData updates
-
+  }, [caseData]);
+  
+  // Re-syncs logs when entries are updated
   useEffect(() => {
-    if (users) {
+    if (entries.length > 0) {
+      handleSyncLogs();
     }
-  }, [users]); // ✅ Runs whenever caseData updates
+  }, [entries]);
 
-  useEffect(() => {
-    setLastSync(getCurrentTimestamp());
-  }, []);
   const handleSch = async () => {
     const userId = sessionStorage.getItem("userId");
     try {
       // Fetch schedule data
-      const data = await fetchWithFallback(`/api/schedule/${userId}`);
-      setSchedu(data.hierarchy); // Update schedule state
-      const data1 = data.hierarchy;
-
-      // Extract unique user IDs from comma-separated string
-      const userIds = [
-        ...new Set(
-          data1
-            .split(",")
-            .map((id) => id.trim())
-            .filter((id) => id)
-        ),
-      ];
-
-      // Fetch details for each unique user ID
-      const userDetails = await Promise.all(
-        userIds.map(async (id) => {
-          try {
-            return await fetchWithFallback(`/api/user/${id}`);
-          } catch (error) {
-            console.error(`Failed to fetch user details for ID: ${id}:`, error);
-            return null;
-          }
-        })
+      const response = await fetch(
+        `https://vfinserv.in/api/schedule/${userId}`
       );
+      if (response.ok) {
+        const data = await response.json(); // Await the JSON response
+        setSchedu(data.hierarchy); // Update schedule state
+        const data1 = data.hierarchy;
 
-      // Remove null/empty values before setting state
-      setUsers(userDetails.filter((user) => user));
+        // Extract unique user IDs from comma-separated string
+        const userIds = [
+          ...new Set(
+            data1
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id)
+          ),
+        ];
+
+        // Fetch details for each unique user ID
+        const userDetails = await Promise.all(
+          userIds.map(async (id) => {
+            const userRes = await fetch(`https://vfinserv.in/api/user/${id}`);
+            if (userRes.ok) {
+              return await userRes.json(); // Return user details
+            }
+            console.error(`Failed to fetch user details for ID: ${id}`);
+            return null;
+          })
+        );
+
+        // Remove null/empty values before setting state
+        setUsers(userDetails.filter((user) => user));
+      } else {
+        console.error("Failed to fetch schedule:", response.status);
+      }
     } catch (error) {
       console.error("Error fetching schedule:", error);
     }
   };
 
-  const getCurrentTimestamp = () => {
-    return new Date().toLocaleString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  const getCurrentTimestamp = () => new Date().toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short", year: "numeric" });
 
   const decryptData = (encryptedData) => {
     try {
       const PPass = sessionStorage.getItem("CasePPass");
       const bytes = CryptoJS.AES.decrypt(encryptedData, PPass);
       const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-      return JSON.parse(decryptedText); // Convert back to JSON object
+      return JSON.parse(decryptedText);
     } catch (error) {
       console.error("Decryption failed:", error);
       return null;
     }
   };
-  const handleSchedule = async (
-    fromUser,
-    toUser,
-    tousername,
-    note,
-    casePfile
-  ) => {
-    try {
-      const mark = false;
-      const readStatus = false;
 
-      try {
-        await fetchWithFallback(`/api/insert/notify`, {
-          method: "POST",
-          body: JSON.stringify({
-            fromUser,
-            toUser,
-            tousername,
-            note,
-            casePfile,
-            mark: mark === "true",
-            readStatus: readStatus === "true",
-          })
-        });
-        console.log("Chunk stored successfully");
-      } catch (error) {
-        console.error("Error storing chunk:", error);
-        alert("Error storing chunk");
-      }
+  const handleScheduleNotification = async (note) => {
+    try {
+      await fetchWithFallback(`/api/insert/notify`, {
+        method: "POST",
+        body: JSON.stringify({
+          fromUser: userid,
+          toUser: assignedTo,
+          tousername: assignedToName,
+          note,
+          casePfile: caseData.PIndex,
+          mark: false,
+          readStatus: false,
+        })
+      });
     } catch (error) {
-      console.error("Error storing encrypted JSON chunk:", error);
+      console.error("Error sending notification:", error);
     }
   };
-  const handleAdd1 = () => {
+
+  const handleAddEntry = () => {
     if (!input.trim()) return;
-    const name = sessionStorage.getItem("username");
-    const userid = sessionStorage.getItem("userId");
-    setUserName(name);
-    setUserID(userid);
-    if (activeTab === "tasks" && assignedTo) {
-      handleSchedule(userid, assignedTo, input, caseData.PIndex);
+
+    if (activeTab === "tasks") {
+        if (!assignedTo) {
+            toast.warn("Please assign the task to a user.");
+            return;
+        }
+        handleScheduleNotification(input);
     }
 
-    const newEntry =
-      activeTab === "notes"
-        ? {
-            type: "note",
-            message: input,
-            user: name,
-            timestamp: getCurrentTimestamp(),
-          }
-        : {
-            type: "task",
-            scheduleTo: assignedTo || "Unassigned",
-            message: input,
-            user: name, // Now showing who scheduled it
-            timestamp: getCurrentTimestamp(),
-          };
+    const newEntry = activeTab === "notes"
+      ? { type: "note", message: input, user: username, timestamp: getCurrentTimestamp() }
+      : { type: "task", scheduleTo: assignedToName, message: input, user: username, timestamp: getCurrentTimestamp() };
 
     setEntries([newEntry, ...entries]);
     setInput("");
     setAssignedTo("");
-    setShowDropdown(false);
+    setAssignedToName("");
+    setShowAssigneeDropdown(false);
   };
-
-  useEffect(() => {
-    if (entries.length > 0) {
-      handleSync(null);
-    }
-  }, [entries]); // Runs every time 'entries' updates
-
-  const handleAdd = () => {
-    if (!input.trim()) return;
-    const name = sessionStorage.getItem("username");
-    const userid = sessionStorage.getItem("userId");
-    setUserName(name);
-    setUserID(userid);
-
-    if (activeTab === "tasks" && assignedTo) {
-      handleSchedule(userid, assignedTo, name, input, caseData.PIndex);
-    }
-
-    const newEntry =
-      activeTab === "notes"
-        ? {
-            type: "note",
-            message: input,
-            user: name,
-            timestamp: getCurrentTimestamp(),
-          }
-        : {
-            type: "task",
-            scheduleTo: assignedToName || "Unassigned",
-            message: input,
-            user: name, // Now showing who scheduled it
-            timestamp: getCurrentTimestamp(),
-          };
-
-    setEntries([newEntry, ...entries]); // Once 'entries' updates, useEffect will trigger handleSync
-
-    setInput("");
-    setAssignedTo("");
-    setShowDropdown(false);
-  };
-
-  const getCurrentTimestampd = () => {
-    const now = new Date();
-    return now.toLocaleString();
-  };
-
+  
   const genEIForPfile = (PPass, n) => {
-    const crypto = require("crypto");
     PPass = PPass.toString("hex");
-    let InitialIndex = Buffer.from(
-      crypto.createHash("sha256").update(PPass).digest("hex"),
-      "hex"
-    ).subarray(0, 32);
-
+    let InitialIndex = Buffer.from(crypto.createHash("sha256").update(PPass).digest("hex"),"hex").subarray(0, 32);
     InitialIndex = parseInt(InitialIndex[0]) % 100;
     n += InitialIndex;
-    let PI = crypto
-      .createHash("sha256")
-      .update(PPass + n)
-      .digest("hex");
-    let node = InitialIndex % 4;
-
-    return {
-      pi: PI,
-      noo: node,
-    };
+    let PI = crypto.createHash("sha256").update(PPass + n).digest("hex");
+    return { pi: PI };
   };
+  
   const decryptData2 = (encrypted, key, iv) => {
     try {
-      const decipher = crypto.createDecipheriv(
-        "aes-256-cbc",
-        key,
-        Buffer.from(iv, "hex")
-      );
-      return Buffer.concat([
-        decipher.update(Buffer.from(encrypted, "hex")),
-        decipher.final(),
-      ]);
+      const decipher = crypto.createDecipheriv("aes-256-cbc",key,Buffer.from(iv, "hex"));
+      return Buffer.concat([decipher.update(Buffer.from(encrypted, "hex")),decipher.final()]);
     } catch (error) {
       console.error("Decryption error:", error);
       return null;
     }
+  };
+
+  const handleRetrieveAndDecryptFiles = async () => {
+    if (!caseData?.PIndex) return;
+    setLoading(true);
+    try {
+      const data = await fetchWithFallback(`/api/get-docs/${caseData.PIndex}`);
+      setRetrievedFiles(data || []);
+    } catch (error) {
+      toast.error("Failed to fetch files.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  function handleFileUpload(event) {
+    setfiles([...files, ...event.target.files]);
+  }
+  function downloadFile(fileName, base64Content) {
+    const byteCharacters = atob(base64Content);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const handleFetchCustomerDetails = () => {
+    if (caseData?.CoustomerDetails) {
+      const decryptedCustomerData = decryptData(caseData.CoustomerDetails);
+      if (decryptedCustomerData) setCustomerDetails(decryptedCustomerData);
+    }
+  };
+  
+  const handleSyncLogs = async () => {
+    const PPass = sessionStorage.getItem("CasePPass");
+    if (!PPass || !caseData?.PFile) return;
+
+    function encryptData(data, key) {
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
+        const encrypted = Buffer.concat([cipher.update(data, "utf8"),cipher.final()]);
+        return { encryptedData: encrypted.toString("hex"), iv: iv.toString("hex") };
+    }
+
+    const jsonData = JSON.stringify(entries, null, 2);
+    const fragments = [];
+    for (let i = 0; i < jsonData.length; i += 512) {
+      fragments.push(jsonData.slice(i, i + 512));
+    }
+
+    const KFile = crypto.randomBytes(32).toString("hex");
+    const { encryptedData: PFile, iv: PFileIV } = encryptData(KFile + "$$" + fragments.length + "@@4", Buffer.from(PPass, "utf-8").subarray(0, 32));
+    const { pi } = genEIForPfile(caseData.PFile, 1);
+
+    try {
+      await fetchWithFallback(`/api/logs/pfile/insert`, {
+        method: "POST", body: JSON.stringify({ eindex: pi, pfile: PFile, pfileiv: PFileIV })
+      });
+    } catch (error) { console.error("Error storing PFile:", error); }
+
+    const PFileKey = Buffer.from(crypto.createHash("sha256").update(PFile).digest("hex"), "hex").subarray(0, 32);
+    const InitialIndex = parseInt(PFile.substring(0, 6), 16) % 100;
+    
+    let EI = [];
+    for (let n = InitialIndex; n < InitialIndex + fragments.length; n++) {
+      EI.push(crypto.createHash("sha256").update(PFile + n).digest("hex"));
+    }
+
+    const EM = fragments.map(fragment => encryptData(fragment, PFileKey));
+
+    for (let i = 0; i < EM.length; i++) {
+        try {
+            await fetchWithFallback(`/api/insert/k`, {
+                method: "POST", body: JSON.stringify({ eindex: EI[i], emessage: EM[i].encryptedData, iv: EM[i].iv })
+            });
+        } catch (error) { console.error("Error storing fragment:", error); }
+    }
+    setLastSync(getCurrentTimestamp());
+  };
+
+  const handleUpdateStatus = async () => {
+    setLoading(true);
+    try {
+      await fetchWithFallback(`/api/userFile/updateStatus`, {
+        method: "POST",
+        body: JSON.stringify({ pindex: caseData.PIndex, status: selectedStatus }),
+      });
+      setCaseData(prev => ({ ...prev, Status: selectedStatus }));
+      toast.success("Status updated successfully!");
+      setShowStatusEditor(false);
+    } catch (error) {
+      toast.error("Failed to update status.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleDecryptLogs = async () => {
+    const PPass = sessionStorage.getItem("CasePPass");
+    if (!caseData?.PFile || !PPass) return;
+
+    function decryptData(encrypted, key, iv) {
+      const decipher = crypto.createDecipheriv("aes-256-cbc", key, Buffer.from(iv, "hex"));
+      return Buffer.concat([decipher.update(Buffer.from(encrypted, "hex")), decipher.final()]).toString();
+    }
+    
+    const { pi } = genEIForPfile(caseData.PFile, 1);
+    
+    try {
+        const pfileData = await fetchWithFallback(`/api/logs/pfile/fetch/${pi}`);
+        if (!pfileData) { setEntries([]); return; }
+        
+        const { PFile, PFileIv } = pfileData;
+        const decryptedPFileData = decryptData(PFile, Buffer.from(PPass, "utf-8").subarray(0, 32), PFileIv);
+        const PFileKey = Buffer.from(crypto.createHash("sha256").update(PFile).digest("hex"), "hex").slice(0, 32);
+        
+        const [, rest] = decryptedPFileData.split("$$");
+        const [fragLengthStr] = rest.split("@@");
+        const fragLength = parseInt(fragLengthStr, 10);
+        
+        const InitialIndex = parseInt(PFile.substring(0, 6), 16) % 100;
+
+        let EI = [];
+        for (let n = InitialIndex; n < InitialIndex + fragLength; n++) {
+            EI.push(crypto.createHash("sha256").update(PFile + n).digest("hex"));
+        }
+
+        const fragmentsData = await Promise.all(EI.map(eindex => fetchWithFallback(`/api/fetch/k/${eindex}`)));
+        
+        let decryptedMsg = "";
+        fragmentsData.forEach(data => {
+            if (data) decryptedMsg += decryptData(data.EMessage, PFileKey, data.IV);
+        });
+
+        setEntries(JSON.parse(decryptedMsg) || []);
+
+    } catch (error) {
+        console.error("Error during log decryption:", error);
+        setEntries([]);
+    }
+  };
+  
+  const handleBack = () => {
+    sessionStorage.removeItem("CasePPass");
+    sessionStorage.removeItem("selectedCase");
+    router.push("/home");
   };
   async function getCaseFiles(pindex) {
     try {
@@ -299,365 +369,17 @@ export default function ViewCase() {
     }
   }
   const handleRetrieveAndDecrypt = async () => {
+
     setLoading(true);
     try {
       const data = await getCaseFiles(caseData.PIndex);
-      setRetrievedFile(data);
+      setRetrievedFiles(data);
     } catch (error) {
       alert("Failed to fetch files");
     } finally {
       setLoading(false);
     }
   };
-  function downloadFile(fileName, base64Content) {
-    // Decode Base64 string
-    const byteCharacters = atob(base64Content);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-
-    // Create Blob and Download
-    const blob = new Blob([byteArray]);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  const handleFetchCustomerDetails = () => {
-    if (caseData.CoustomerDetails) {
-      const decryptedCustomerData = decryptData(caseData.CoustomerDetails);
-      if (decryptedCustomerData) {
-        setCustomerDetails(decryptedCustomerData);
-      } else {
-        alert("Failed to decrypt customer details.");
-      }
-    } else {
-      alert("No customer details found.");
-    }
-  };
-  const handleSync = async (e) => {
-    if (e) e.preventDefault(); // Prevent form submission
-
-    const name = sessionStorage.getItem("username");
-    setUserName(name);
-    const crypto = require("crypto");
-
-    const CHUNK_SIZE = 512; // Define chunk size for JSON
-    const PPass = sessionStorage.getItem("CasePPass");
-    const KFile = crypto.randomBytes(32).toString("hex");
-    const numNodes = 4; // Number of nodes
-
-    function encryptData(data, key) {
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
-      const encrypted = Buffer.concat([
-        cipher.update(data, "utf8"),
-        cipher.final(),
-      ]);
-      return {
-        encryptedData: encrypted.toString("hex"),
-        iv: iv.toString("hex"),
-      };
-    }
-
-    // Input JSON (Assuming userJson is a JSON object)
-    const jsonData = JSON.stringify(entries, null, 2); // Convert JSON to string
-
-    // Step 1: Fragment the JSON message
-    const fragments = [];
-    for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
-      fragments.push(jsonData.slice(i, i + CHUNK_SIZE));
-    }
-
-    // Step 2: Generate NodePattern
-    const NodePattern = [];
-    for (let i = 0; i < fragments.length; i++) {
-      NodePattern.push((i % numNodes) + 1);
-    }
-
-    // Step 3: Encrypt KFile to generate PFile
-    const { encryptedData: PFile, iv: PFileIV } = encryptData(
-      KFile + "$$" + fragments.length + "@@" + numNodes,
-      Buffer.from(PPass, "utf-8").subarray(0, 32)
-    );
-    /* const { encryptedData: PFile11, iv: PFileIV11 } = encryptPFile(
-      KFile + "$$" + documents.length ,
-      Buffer.from(PPass, "utf-8").subarray(0, 32)
-    ); */
-    let NoOfFilesStored = 1;
-    const { pi, noo } = genEIForPfile(caseData.PFile, NoOfFilesStored);
-    const eindex = pi;
-    const pfile = PFile;
-    const pfileiv = PFileIV;
-
-    try {
-      const response = await fetch(
-        `https://vfinserv.in/api/logs/pfile/insert`,
-        {
-          method: "POST",
-          mode: "cors",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            eindex,
-            pfile,
-            pfileiv,
-          }),
-        }
-      );
-
-      if (response.ok) {
-      } else {
-        alert("Not successful");
-      }
-    } catch (error) {
-      console.error("Error storing PFile:", error);
-    }
-
-    sessionStorage.setItem(`pf`, PFile);
-    sessionStorage.setItem("pfiv", PFileIV);
-
-    // Convert PFile to a 32-byte buffer key
-    const PFileKey = Buffer.from(
-      crypto.createHash("sha256").update(PFile).digest("hex"),
-      "hex"
-    ).subarray(0, 32);
-
-    // Step 4: Compute InitialIndex
-    const InitialIndex = parseInt(PFile.substring(0, 6), 16) % 100;
-
-    // Step 5: Generate EI (Encrypted Index Array)
-    let EI = [];
-    for (let n = InitialIndex; n < InitialIndex + fragments.length; n++) {
-      let hash = crypto
-        .createHash("sha256")
-        .update(PFile + n)
-        .digest("hex");
-      EI.push(hash);
-    }
-
-    // Step 6: Encrypt fragments using PFileKey
-    let EM = [];
-    fragments.forEach((fragment) => {
-      let { encryptedData, iv } = encryptData(fragment, PFileKey);
-      EM.push({ encryptedData, iv });
-    });
-
-    for (let i = 0; i < fragments.length; i++) {
-      let eindex = EI[i];
-      let emessage = EM[i]["encryptedData"];
-      let iv = EM[i]["iv"];
-
-      try {
-        const response = await fetch(`https://vfinserv.in/api/insert/k`, {
-          method: "POST",
-          mode: "cors",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            eindex,
-            emessage,
-            iv,
-          }),
-        });
-
-        if (response.ok) {
-          console.log("Chunk stored successfully");
-        } else {
-          alert("Error storing chunk");
-        }
-      } catch (error) {
-        console.error("Error storing encrypted JSON chunk:", error);
-      }
-    }
-    setLastSync(getCurrentTimestampd());
-  };
-
-  const handelUpdateStatus = async () => {
-    try {
-      const pindex = caseData.PIndex;
-      const status = selectedStatus;
-      console.log("updation started");
-
-      const response = await fetch(
-        `https://vfinserv.in/api/userFile/updateStatus`,
-        {
-          method: "POST",
-          mode: "cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pindex,
-            status,
-          }),
-        }
-      );
-      setalteredCase(selectedStatus);
-      sessionStorage.setItem("alteredSt", selectedStatus);
-      console.log("updation ended");
-      const data = await response.json();
-      console.log(data.message);
-      if (!response.ok) throw new Error(`Failed to store fragment `);
-      else {
-        setShowStatusDropdown(false);
-      }
-    } catch (error) {
-      console.error("Error parsing decrypted JSON:", error);
-    }
-  };
-
-  const handleDecrypt = async () => {
-    const name = sessionStorage.getItem("username");
-    setUserName(name);
-    const crypto = require("crypto");
-
-    function decryptData(encrypted, key, iv) {
-      const decipher = crypto.createDecipheriv(
-        "aes-256-cbc",
-        key,
-        Buffer.from(iv, "hex")
-      );
-      return Buffer.concat([
-        decipher.update(Buffer.from(encrypted, "hex")),
-        decipher.final(),
-      ]).toString();
-    }
-    if (!caseData || !caseData.PFile) {
-      return;
-    }
-    const PPass = sessionStorage.getItem("CasePPass");
-
-    let NoOfFilesStored = 1;
-
-    const { pi, noo } = genEIForPfile(caseData.PFile, NoOfFilesStored);
-    let PFile = "";
-    let PFileIV = "";
-    try {
-      const response = await fetch(
-        `https://vfinserv.in/api/logs/pfile/fetch/${pi}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        PFile = data.PFile;
-        PFileIV = data.PFileIv;
-      } else {
-        console.error("Failed to fetch PFile, status:", response.status);
-        return;
-      }
-    } catch (error) {
-      console.error("Error fetching PFile:", error);
-      return;
-    }
-
-    // Decrypt PFile to retrieve metadata
-    const decryptedPFileData = decryptData(
-      PFile,
-      Buffer.from(PPass, "utf-8").subarray(0, 32),
-      PFileIV
-    );
-    const PFileKey = Buffer.from(
-      crypto.createHash("sha256").update(PFile).digest("hex"),
-      "hex"
-    ).slice(0, 32);
-    const [decryptedKFile, rest] = decryptedPFileData.split("$$");
-    const [fragLength, nodeCount] = rest.split("@@");
-
-    // Compute InitialIndex
-    const InitialIndex = parseInt(PFile.substring(0, 6), 16) % 100;
-    /*     const NodePattern = [];
-    for (let i = 0; i < fragLength; i++) {
-      NodePattern.push((i % nodeCount) + 1);
-    } */
-
-    // Generate Encrypted Index (EI)
-    let EI = [];
-    for (let n = InitialIndex; n < InitialIndex + fragLength; n++) {
-      let hash = crypto
-        .createHash("sha256")
-        .update(PFile + n)
-        .digest("hex");
-      EI.push(hash);
-    }
-
-    // Fetch and decrypt fragments
-    let decryptedMsg = "";
-    for (let i = 0; i < fragLength; i++) {
-      try {
-        const response = await fetch(
-          `https://vfinserv.in/api/fetch/k/${EI[i]}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          decryptedMsg += decryptData(data.EMessage, PFileKey, data.IV);
-        } else {
-          console.error("Failed to fetch fragment, status:", response.status);
-        }
-      } catch (error) {
-        console.error("Error fetching fragment:", error);
-      }
-    }
-
-    // Parse decrypted JSON data
-    try {
-      const jsonData = JSON.parse(decryptedMsg);
-      setEntries(jsonData);
-    } catch (error) {
-      console.error("Error parsing decrypted JSON:", error);
-    }
-  };
-  const handleBack = () => {
-    sessionStorage.removeItem("CasePPass");
-    sessionStorage.removeItem("selectedCase");
-    sessionStorage.removeItem("pf");
-    sessionStorage.removeItem("pfiv");
-    if (sessionStorage.getItem("alteredSt")) {
-      sessionStorage.removeItem("alteredSt");
-    }
-
-    router.push("/home");
-  };
-  const [files, setfiles] = useState([]);
-  function handleFileUpload(event) {
-    setfiles([...files, ...event.target.files]);
-  }
-
-  function removeDocument(index) {
-    setfiles(files.filter((_, i) => i !== index));
-  }
-  const [selectedFiles, setSelectedFiles] = useState([]);
-
-  const handleSelectFile = (fileName) => {
-    setSelectedFiles((prev) =>
-      prev.includes(fileName)
-        ? prev.filter((name) => name !== fileName)
-        : [...prev, fileName]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFiles.length === retrievedFile.length) {
-      setSelectedFiles([]);
-    } else {
-      setSelectedFiles(retrievedFile.map((file) => file.file_name));
-    }
-  };
-
-  const handleDownloadSelected = () => {
-    retrievedFile.forEach((file) => {
-      if (selectedFiles.includes(file.file_name)) {
-        downloadFile(file.file_name, file.file_content);
-      }
-    });
-  };
-
   const handleNewFileUpload = () => {
     if (!files || files.length === 0) return;
 
@@ -695,329 +417,215 @@ export default function ViewCase() {
     }
   };
 
+
+  const handleAdd = () => {
+    if (!input.trim()) return;
+    const name = sessionStorage.getItem("username");
+    const userid = sessionStorage.getItem("userId");
+    setUserName(name);
+    setUserID(userid);
+
+    if (activeTab === "tasks" && assignedTo) {
+      handleSchedule(userid, assignedTo, name, input, caseData.PIndex);
+    }
+
+    const newEntry =
+      activeTab === "notes"
+        ? {
+            type: "note",
+            message: input,
+            user: name,
+            timestamp: getCurrentTimestamp(),
+          }
+        : {
+            type: "task",
+            scheduleTo: assignedToName || "Unassigned",
+            message: input,
+            user: name, // Now showing who scheduled it
+            timestamp: getCurrentTimestamp(),
+          };
+
+    setEntries([newEntry, ...entries]); // Once 'entries' updates, useEffect will trigger handleSync
+
+    setInput("");
+    setAssignedTo("");
+    setShowAssigneeDropdown(false);
+  };
+  const handleSchedule = async (
+    fromUser,
+    toUser,
+    tousername,
+    note,
+    casePfile
+  ) => {
+    try {
+      const mark = false;
+      const readStatus = false;
+
+      const response = await fetch(`https://vfinserv.in/api/insert/notify`, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromUser,
+          toUser,
+          tousername,
+          note,
+          casePfile,
+          mark: mark === "true",
+          readStatus: readStatus === "true",
+        }),
+      });
+
+      if (response.ok) {
+        console.log("Chunk stored successfully");
+      } else {
+        alert("Error storing chunk");
+      }
+    } catch (error) {
+      console.error("Error storing encrypted JSON chunk:", error);
+    }
+  };
+  if (!caseData) return <Loading />;
+
   return (
-    <div>
-      {caseData ? (
-        <div className="bg-white flex  items-center shadow-md text-black border-b-4 border-orange-500 p-6  text-center w-full">
-          <button onClick={handleBack}>
-            <div className="text-xl font-extrabold text-gray-800 flex justify-center items-center">
-              <img
-                src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95"
-                alt="SOURCECORP"
-              />
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-200 via-white to-orange-200 text-black p-4 md:p-6 font-sans">
+      {loading && <Loading />}
+      <header className="bg-white/80 backdrop-blur-md shadow-lg p-3 px-4 flex justify-between items-center rounded-xl mb-6 sticky top-4 z-20">
+        <div className="flex items-center gap-3">
+          <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+            <Icon path="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z" />
           </button>
-          <div className="w-full flex justify-center items-center">
-            <h1 className="text-2xl text-center font-bold text-gray-900">
-              {caseData.Name}
-            </h1>
-          </div>
+          <h1 className="text-lg md:text-xl font-bold text-gray-800 truncate">{caseData.Name}</h1>
         </div>
-      ) : (
-        <div className="bg-white flex justify-between items-center shadow-md rounded-lg p-6 mb-6 text-center w-full">
-          <button onClick={handleBack}>
-            <div className="text-xl font-extrabold text-gray-800 flex justify-center items-center">
-              <img
-                src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95"
-                alt="SOURCECORP"
-              />
-            </div>
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900">{caseData.Name}</h1>
+        <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 hidden md:inline">Last Sync: {lastSync}</span>
+            <button onClick={handleDecryptLogs} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="Refresh Logs">
+                <Icon path="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z" />
+            </button>
         </div>
-      )}
+      </header>
 
-      <div className="min-h-screen bg-gradient-to-br from-blue-200 to-black  p-6 text-black">
-        {caseData ? (
-          <div>
-            <div className="flex flex-col items-center justify-center py-5">
-              <h1 className=" font-extrabold text-xl  text-gray-900">LOGS</h1>
-              <div className="flex  items-center justify-center w-full gap-1 flex-col ">
-                {/* <button onClick={handleSync} className="bg-blue-500 text-white p-2 rounded-lg shadow-md hover:bg-blue-600">
-                  Sync
-                </button> */}
-                <button
-                  onClick={handleDecrypt}
-                  className="bg-orange-400 font-bold text-blue-900 p-2 rounded-lg shadow-md hover:bg-orange-600"
-                >
-                  Refresh
-                </button>
-                <p className="text-base text-orange-200  mt-2">
-                  Last synced: {lastSync}
-                </p>
-              </div>
-            </div>
+      <main className="grid grid-cols-1 lg:grid-cols-11 gap-6">
+        {/* Main Content: Activity Feed */}
+        
 
-            <div className="flex flex-row  justify-around  items-center h-[70vh] ">
-              {/* Customer Details Section */}
-              <div className="w-[35%] flex flex-col items-center space-y-6">
-                {/* Customer Details */}
-                <div className="bg-orange-100 border border-orange-400 shadow-lg p-6 rounded-xl w-full max-w-2xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-orange-700">
-                      Customer Details
-                    </h2>
-                    <button
-                      onClick={() => handleFetchCustomerDetails()}
-                      className="text-orange-600 hover:text-orange-800 transition"
-                      title="Toggle Customer Details"
-                    >
-                      {customerDetails ? "" : "fetch"}
-                    </button>
-                  </div>
-
-                  {customerDetails && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-sm text-gray-700">
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Name:
-                        </span>
-                        <p>{customerDetails.name}</p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Contact:
-                        </span>
-                        <p>{customerDetails.contact}</p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Email:
-                        </span>
-                        <p>{customerDetails.email}</p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Loan Amount:
-                        </span>
-                        <p>{customerDetails.amount}</p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Loan Type:
-                        </span>
-                        <p>{customerDetails.type}</p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-gray-900">
-                          Case Type:
-                        </span>
-                        <p>{customerDetails.unknown1}</p>
-                      </div>
+        {/* Sidebar: Case Details */}
+        <div className="lg:col-span-6 xl:col-span-3 space-y-6">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-4">
+                <h3 className="font-bold text-gray-800 mb-2">Case Status</h3>
+                {!showStatusEditor ? (
+                    <div className="flex justify-between items-center">
+                        <span className="px-3 py-1 text-sm font-semibold rounded-full bg-orange-100 text-orange-800">{caseData.Status}</span>
+                        <button onClick={() => setShowStatusEditor(true)} className="text-sm text-blue-600 hover:underline">Change</button>
                     </div>
-                  )}
-                </div>
-
-                {/* Retrieved Files */}
-                <div className="bg-orange-100 border border-orange-400 shadow-lg p-6 rounded-xl w-full max-w-2xl space-y-6">
-                  {/* Retrieved Files Section */}
-                  <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-semibold text-orange-700">
-                        Retrieved Files
-                      </h2>
-                      <div className="flex items-center gap-3">
-                        <label className="text-sm text-gray-700 flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={
-                              retrievedFile?.length > 0 &&
-                              selectedFiles.length === retrievedFile.length
-                            }
-                            onChange={handleSelectAll}
-                          />
-                          Select All
-                        </label>
-                        <button
-                          onClick={handleDownloadSelected}
-                          disabled={selectedFiles.length === 0}
-                          className={`px-3 py-1 rounded-md text-white text-sm ${
-                            selectedFiles.length === 0
-                              ? "bg-gray-400 cursor-not-allowed"
-                              : "bg-blue-600 hover:bg-blue-700"
-                          }`}
-                        >
-                          Download Selected
-                        </button>
-                        <button
-                          onClick={handleRetrieveAndDecrypt}
-                          className="text-orange-600 hover:text-orange-800 transition text-sm"
-                          title="Fetch Files"
-                        >
-                          {retrievedFile ? "Refresh" : "Fetch"}
-                        </button>
-                      </div>
+                ) : (
+                    <div className="space-y-2">
+                        <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md">
+                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div className="flex gap-2">
+                            <button onClick={handleUpdateStatus} className="flex-1 bg-blue-600 text-white text-sm py-1 rounded-md">Save</button>
+                            <button onClick={() => setShowStatusEditor(false)} className="flex-1 bg-gray-200 text-sm py-1 rounded-md">Cancel</button>
+                        </div>
                     </div>
-
-                    {retrievedFile && (
-                      <div className="overflow-y-auto max-h-48 pr-2 space-y-2">
-                        {retrievedFile.map((file, index) => (
-                          <div
-                            key={index}
-                            className="flex justify-between items-center text-sm bg-white rounded-md px-3 py-2 shadow-sm"
-                          >
-                            <div className="flex items-center gap-2 w-full">
-                              <input
-                                type="checkbox"
-                                checked={selectedFiles.includes(file.file_name)}
-                                onChange={() =>
-                                  handleSelectFile(file.file_name)
-                                }
-                              />
-                              <span className="truncate max-w-[70%] text-gray-800">
-                                {file.file_name}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() =>
-                                downloadFile(file.file_name, file.file_content)
-                              }
-                              className="text-blue-600 hover:text-blue-800 font-semibold"
-                            >
-                              ⬇ Download
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Section (Visible only after files are retrieved) */}
-                  {retrievedFile && (
-                    <div className="pt-6 border-t border-orange-300">
-                      {/* Heading */}
-                      <h1 className="w-full text-black flex justify-center items-center font-extrabold gap-3 pb-6">
-                        <span className="h-[2px] w-[35%] bg-orange-400 shadow shadow-black"></span>
-                        Documentation
-                        <span className="h-[2px] w-[35%] bg-orange-400 shadow shadow-black"></span>
-                      </h1>
-
-                      {/* Upload Form */}
-                      <div className="bg-white p-4 w-full shadow-md rounded-lg flex flex-col gap-4 text-black border border-black">
-                        <div className="flex justify-between items-center">
-                          <label className="cursor-pointer bg-blue-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-600">
-                            Choose Files
-                            <input
-                              type="file"
-                              multiple
-                              onChange={handleFileUpload}
-                              className="hidden"
-                            />
-                          </label>
-
-                          <span className="text-gray-700">
-                            {files.length > 0
-                              ? `${files.length} file(s) selected`
-                              : "No files chosen"}
-                          </span>
-                        </div>
-
-                        <div className="overflow-y-auto min-h-10 max-h-32 border border-black rounded-2xl shadow p-4">
-                          {files.length > 0 ? (
-                            files.map((doc, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center text-sm"
-                              >
-                                <p className="truncate w-4/5">{doc.name}</p>
-                                <button
-                                  onClick={() => removeDocument(index)}
-                                  className="text-red-500 hover:text-red-700"
-                                >
-                                  ✖
-                                </button>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-gray-500 text-sm text-center">
-                              No files chosen
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <button
-                            onClick={handleNewFileUpload}
-                            className="flex w-full justify-center items-center cursor-pointer bg-blue-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-600 "
-                          >
-                            add files
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex  justify-center items-center w-[25%] flex-col gap-1 ">
-                <h2 className="text-lg font-bold text-9-700">
-                  Current Status:{" "}
-                  {alteredCase !== "" ? alteredCase : caseData.Status}
-                </h2>
-
-                <button
-                  onClick={() => setShowStatusDropdown(true)}
-                  className="bg-orange-400 font-bold text-blue-900 hover:bg-orange-500 px-4 py-2 mt-2 rounded-lg"
-                >
-                  Modify Status
-                </button>
-                {showStatusDropdown && (
-                  <div className="mt-2 bg-white p-4 shadow-md rounded-lg">
-                    <select
-                      value={selectedStatus}
-                      onChange={(e) => setSelectedStatus(e.target.value)}
-                      className="p-2 border rounded-lg"
-                    >
-                      {statuses.map((status, index) => (
-                        <option key={index} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={handelUpdateStatus}
-                      className="bg-blue-500 text-white px-4 py-2 ml-2 rounded-lg hover:bg-blue-600"
-                    >
-                      Confirm
-                    </button>
-                  </div>
                 )}
-              </div>
+            </div>
 
-              <div className="bg-orange-200 border-4 border-orange-500 shadow-lg rounded-lg p-6  w-[42rem]  h-[60vh]">
-                <div className="flex justify-center space-x-4 mb-4">
-                  <button
-                    className={`px-4 py-2 rounded-lg ${
-                      activeTab === "notes"
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-200"
-                    }`}
-                    onClick={() => setActiveTab("notes")}
-                  >
-                    Notes
-                  </button>
-                  <button
-                    className={`px-4 py-2 rounded-lg ${
-                      activeTab === "tasks"
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-200"
-                    }`}
-                    onClick={() => setActiveTab("tasks")}
-                  >
-                    Task
-                  </button>
+            {/* Customer Details Accordion */}
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg">
+                <button onClick={() => setIsCustomerOpen(!isCustomerOpen)} className="w-full flex justify-between items-center p-4 font-bold text-gray-800">
+                    Customer Details <ChevronDownIcon />
+                </button>
+                {isCustomerOpen && customerDetails && (
+                    <div className="p-4 border-t grid grid-cols-2 gap-4 text-sm">
+                        <div><strong className="block text-gray-500">Name</strong>{customerDetails.name}</div>
+                        <div><strong className="block text-gray-500">Contact</strong>{customerDetails.contact}</div>
+                        <div><strong className="block text-gray-500">Email</strong>{customerDetails.email}</div>
+                        <div><strong className="block text-gray-500">Loan Amount</strong>₹{customerDetails.amount}</div>
+                        <div><strong className="block text-gray-500">Loan Type</strong>{customerDetails.type}</div>
+                        <div><strong className="block text-gray-500">Source</strong>{customerDetails.unknown1}</div>
+                    </div>
+                )}
+            </div>
+
+            {/* Files Accordion */}
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg">
+                <button onClick={() => setIsFilesOpen(!isFilesOpen)} className="w-full flex justify-between items-center p-4 font-bold text-gray-800">
+                    Case Documents <ChevronDownIcon />
+                </button>
+                {isFilesOpen && (
+                    <div className="p-4 border-t space-y-4">
+                        {/* File List */}
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {retrievedFiles.length > 0 ? retrievedFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded-md">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <input type="checkbox" onChange={() => setSelectedFilesToDownload(prev => prev.includes(file.file_name) ? prev.filter(f => f !== file.file_name) : [...prev, file.file_name])} />
+                                        <FileIcon />
+                                        <span className="truncate">{file.file_name}</span>
+                                    </div>
+                                    <button onClick={() => downloadFile(file.file_name, file.file_content)} className="p-1 hover:bg-gray-200 rounded-full"><DownloadIcon /></button>
+                                </div>
+                            )) : <p className="text-center text-gray-500 text-sm">No documents found.</p>}
+                        </div>
+                        {retrievedFiles.length > 0 && (
+                            <button onClick={() => selectedFilesToDownload.forEach(name => downloadFile(name, retrievedFiles.find(f => f.file_name === name)?.file_content))} disabled={selectedFilesToDownload.length === 0} className="w-full text-sm py-1 bg-gray-200 rounded-md disabled:opacity-50">Download Selected</button>
+                        )}
+
+                        {/* File Upload */}
+                        <div className="pt-4 border-t">
+                            <label htmlFor="fileUpload" className="cursor-pointer p-4 border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-center hover:bg-gray-50">
+                                <Icon path="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+                                <span className="text-sm font-semibold text-blue-600">Click to upload or drag & drop</span>
+                                <input id="fileUpload"  type="file"
+                              multiple
+                              onChange={handleFileUpload} className="hidden"/>
+                            </label>
+                            {files.length > 0 && (
+                                <div className="mt-2 space-y-1 text-xs">
+                                    {files.map(f => <p key={f.name} className="truncate">{f.name}</p>)}
+                                    <button onClick={handleNewFileUpload} className="w-full bg-blue-500 text-white font-semibold py-1 mt-1 rounded-md">Upload {files.length} file(s)</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+        </div>
+        {/* This is the main column for the activity feed.
+    - On large screens (lg), it takes up 7/12 of the parent grid.
+    - On smaller screens, it will stack to take the full width.
+*/}
+<div className="lg:col-span-7 xl:col-span-8">
+    
+    {/* This inner container holds all the content.
+        - 'flex flex-col' arranges children (like the title and the list) vertically.
+        - 'max-h-[88vh]' is crucial: it limits the card's height to 88% of the screen's height,
+          preventing the main page from scrolling.
+    */}
+    
+    <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-4 md:p-6 flex flex-col  max-h-[88vh]">
+    <h2 className="text-xl font-bold text-gray-800 mb-4 flex-shrink-0">Activity Feed</h2>
+
+    <div className="flex justify-center mb-4">
+                    <div className="relative flex p-1 bg-gray-200 rounded-full">
+                        <button onClick={() => setActiveTab('notes')} className="relative z-10 px-6 py-2 rounded-full text-sm font-semibold transition-colors">Notes</button>
+                        <button onClick={() => setActiveTab('tasks')} className="relative z-10 px-6 py-2 rounded-full text-sm font-semibold transition-colors">Tasks</button>
+                        <span className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-orange-500 rounded-full transition-transform duration-300 ease-in-out ${activeTab === 'notes' ? 'translate-x-1' : 'translate-x-[calc(100%+2px)]'}`}></span>
+                    </div>
                 </div>
 
-                <div className="mb-4">
-                  <input
-                    type="text"
-                    placeholder={
-                      activeTab === "notes" ? "Enter note..." : "Enter task..."
-                    }
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    className="w-full border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none p-2"
-                  />
-                  {activeTab === "notes" && (
+                {/* Input Area */}
+                <div className="space-y-3">
+                    <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={activeTab === 'notes' ? "Add a note..." : "Describe the task..."} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 min-h-[80px]"></textarea>
+                </div>
+        
+        
+        {activeTab === "notes" && (
                     <div className="relative mt-2">
                       <button
                         onClick={handleAdd}
@@ -1031,32 +639,31 @@ export default function ViewCase() {
                     <div className="relative mt-2">
                       <button
                         className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg"
-                        onClick={() => setShowDropdown(!showDropdown)}
+                        onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
                       >
                         {assignedToName || "Schedule To"}
                       </button>
-                      {showDropdown && (
-  <div className="absolute z-10 bg-white shadow-md rounded-lg mt-2 w-full max-h-48 overflow-y-auto">
-    {users.length > 0 ? (
-      users.map((user) => (
-        <div
-          key={user.ID}
-          className="p-2 hover:bg-gray-100 cursor-pointer"
-          onClick={() => {
-            setAssignedTo(`${user.ID}`);
-            setAssignedToName(user.Name);
-            setShowDropdown(false);
-          }}
-        >
-          {user.Name} : {user.Role}
-        </div>
-      ))
-    ) : (
-      <div className="p-2  text-center">loading....</div>
-    )}
-  </div>
-)}
-
+                      {showAssigneeDropdown && (
+                        <div className="absolute z-10 bg-white shadow-md rounded-lg mt-2 w-full max-h-48 overflow-y-auto">
+                          {users.length > 0 ? (
+                            users.map((user) => (
+                              <div
+                                key={user.ID}
+                                className="p-2 hover:bg-gray-100 cursor-pointer"
+                                onClick={() => {
+                                  setAssignedTo(`${user.ID}`);
+                                  setAssignedToName(user.Name);
+                                  setShowAssigneeDropdown(false);
+                                }}
+                              >
+                                {user.Name} : {user.Role}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-2  text-center">loading....</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {activeTab === "tasks" && !assignedToName && (
@@ -1076,47 +683,88 @@ export default function ViewCase() {
                       </button>
                     </div>
                   )}
-                </div>
-                {entries.length > 0 ? (
-                  <div className="border-2 border-orange-500 shadow-2xl shadow-black rounded-lg p-4 max-h-[35vh] overflow-y-auto space-y-3">
-                    {entries.map((entry, index) => (
-                      <div
-                        key={index}
-                        className={`p-3 rounded-lg shadow ${
-                          entry.type === "note" ? "bg-blue-100" : "bg-green-100"
-                        }`}
-                      >
-                        <h4 className="font-semibold text-blue-500">
-                          {entry.user === username ? "You" : entry.user}
-                        </h4>
-                        {entry.type === "task" ? (
-                          <p className="text-gray-800">
-                            Schedule To: {entry.scheduleTo}
-                            <br /> {entry.message}
-                          </p>
-                        ) : (
-                          <p className="text-gray-800">{entry.message}</p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          {entry.timestamp}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="border-2 border-orange-500 shadow-2xl shadow-black rounded-lg p-4 max-h-[35vh] overflow-y-auto space-y-3">
-                    <div className={`p-3 rounded-lg shadow `}>
-                      Loading..... <br /> Please wait
+        {/* This div is the scrollable list.
+            - 'flex-1' makes it expand to fill all available vertical space.
+            - 'overflow-y-auto' adds a vertical scrollbar only when needed.
+            - 'pr-4' adds padding on the right to prevent the scrollbar from overlapping content.
+        */}
+        <br />
+        <div className="flex-1 overflow-y-auto pr-4">
+            <div className="relative pl-12 space-y-6 border-l-2  border-gray-200">
+                {entries.length > 0 ? entries.map((entry, index) => {
+                    const isYou = entry.user === username;
+
+                    // Simple function to get initials from a name
+                    const getInitials = (name) => {
+                        if (!name) return '?';
+                        const names = name.split(' ');
+                        if (names.length > 1) {
+                            return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+                        }
+                        return name.substring(0, 2).toUpperCase();
+                    };
+
+                    // Simple hashing to get a consistent color for a user
+                    const nameToColor = (name) => {
+                        const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'];
+                        if (!name) return 'bg-gray-500';
+                        let hash = 0;
+                        for (let i = 0; i < name.length; i++) {
+                            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+                        }
+                        return colors[Math.abs(hash % colors.length)];
+                    };
+
+                    return (
+                        <div key={index} className="relative flex gap-4 items-start group">
+                            {/* Timeline Dot and Avatar */}
+                            <div className="absolute -left-[34px] top-1 flex items-center justify-center">
+                                <span className="absolute w-4 h-4 bg-orange-400 rounded-full border-4 border-white"></span>
+                                <div className={`flex items-center justify-center w-10 h-10 rounded-full text-white font-bold text-sm ${nameToColor(entry.user)}`}>
+                                    {getInitials(isYou ? "You" : entry.user)}
+                                </div>
+                            </div>
+
+                            {/* Content Card */}
+                            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-3 w-full transition-all duration-200 group-hover:shadow-md">
+                                <div className="flex justify-between items-center mb-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-gray-800">{isYou ? "You" : entry.user}</span>
+                                        <span className="text-xs text-gray-400">
+                                            {entry.type === 'note' ? 'added a note' : 'created a task'}
+                                        </span>
+                                    </div>
+                                    <span className="text-xs text-gray-500">{entry.timestamp}</span>
+                                </div>
+                                
+                                <div className="text-gray-700 break-words">
+                                    {entry.message}
+                                </div>
+
+                                {entry.type === 'task' && (
+                                    <div className="mt-2 pt-2 border-t border-dashed flex items-center gap-2 text-sm">
+                                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span className="text-gray-500">Assigned to:</span> 
+                                        <strong className="text-green-700">{entry.scheduleTo}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }) : (
+                    <div className="text-center text-gray-500 py-8">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">No Activity</h3>
+                        <p className="mt-1 text-sm text-gray-500">Get started by adding a new note or task.</p>
                     </div>
-                  </div>
                 )}
-              </div>
             </div>
-          </div>
-        ) : (
-          <p>Loading case details...</p>
-        )}
-      </div>
+        </div>
+    </div>
+</div>
+      </main>
     </div>
   );
 }

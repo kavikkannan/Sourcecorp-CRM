@@ -1,6 +1,6 @@
 const API_BASE_URLS = [
      'https://vfinserv.in',
-     'http://localhost:9999'  
+     //'http://localhost:9999'  
 ];
 
 export const fetchWithFallback = async (endpoint, options = {}) => {
@@ -22,7 +22,7 @@ export const fetchWithFallback = async (endpoint, options = {}) => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.log(`HTTP error! status: ${response.status}`);
       }
 
       return await response.json();

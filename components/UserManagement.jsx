@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-// Base URL for all admin API calls
-const BASE_URL = "https://vfinserv.in"; // Changed from 9999 and stopped using fetchWithFallback
+import { fetchWithFallback } from "../utils/api";
 
 export default function UserManagement() {
   const [role, setRole] = useState(""); // Selected role filter
@@ -16,16 +14,12 @@ export default function UserManagement() {
     const fetchUsers = async () => {
       if (role) {
         try {
-          const response = await fetch(`${BASE_URL}/api/users/${role}`,{
-            method:"GET",
-            headers:{
-              "Content-Type":"application/json"
-            },
-            credentials:"include"
+          const data = await fetchWithFallback(`/api/users/${role}`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include"
           });
-
-          if (response.ok) {
-            const data = await response.json();
+          if (data) {
             const formattedUsers = data.map(user => ({
               ...user,
               AppointedMembers: user.AppointedMembers ? user.AppointedMembers.split(",") : [],
@@ -48,19 +42,15 @@ export default function UserManagement() {
   useEffect(() => {
     const fetchAllUsers = async () => {
       try {
-        const response = await fetch(`${BASE_URL}/api/all-users` ,{
-          method:"GET",
-          headers:{
-            "Content-Type":"application/json"
-          },
-          credentials:"include"
+        const data = await fetchWithFallback(`/api/all-users`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include"
         });
-
-        if (response.ok) {
-          const data = await response.json();
+        if (data) {
           setAllUsers(data);
         } else {
-          console.error("Failed to fetch all users",response);
+          console.error("Failed to fetch all users");
         }
       } catch (error) {
         console.error("Error fetching all users:", error);
@@ -83,18 +73,18 @@ export default function UserManagement() {
       const existingMembers = user.AppointedMembers.length > 0 ? user.AppointedMembers.join(",") : "";
       const updatedMembers = existingMembers ? `${existingMembers},${AppointedUserID}` : AppointedUserID;
 
-      const response = await fetch(`${BASE_URL}/api/appoint`, {
+      const response = await fetchWithFallback(`/api/appoint`, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
-        credentials:"include",
+        credentials: "include",
         body: JSON.stringify({ 
           UserID: String(UserID), 
           AppointedMembers: updatedMembers 
         }),
       });
 
-      if (response.ok) {
+      if (response) {
         setUsers(prevUsers =>
           prevUsers.map(user =>
             user.ID === UserID
@@ -118,7 +108,7 @@ export default function UserManagement() {
 // Remove an already–appointed member
 const handleRemoveAppointed = async (UserID, memberID) => {
   try {
-    const response = await fetch(`${BASE_URL}/api/removeAppointedMember`, {
+    const response = await fetchWithFallback(`/api/removeAppointedMember`, {
       method: "POST",
       mode: "cors",
       headers: { "Content-Type": "application/json" },

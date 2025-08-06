@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchWithFallback } from "../utils/api";
 import Toastify from "toastify-js";
-
-const BASE_URL = "https://vfinserv.in";
 
 export default function UserEditor() {
   const [users, setUsers] = useState([]);
@@ -26,16 +25,12 @@ export default function UserEditor() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/api/all-users`,{
-        method:"GET",
-        headers:{
-          "Content-Type":"application/json"
-        },
-        credentials:"include"
+      const data = await fetchWithFallback(`/api/all-users`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
       });
-      if (!res.ok) throw new Error("Failed to fetch users" ,res.message);
-      const data = await res.json();
-      console.log(data);
+      if (!data) throw new Error("Failed to fetch users");
       setUsers(data);
     } catch (e) {
       Toastify({ text: e.message, backgroundColor: "#E53E3E" }).showToast();
@@ -64,7 +59,7 @@ export default function UserEditor() {
     }
 
     try {
-      const url = editingUser ? `${BASE_URL}/api/users/${editingUser.ID}` : `${BASE_URL}/api/users`;
+      const url = editingUser ? `https://vfinserv.in/api/users/${editingUser.ID}` : `https://vfinserv.in/api/users`;
       const method = editingUser ? "PUT" : "POST";
 
       const body = {
@@ -95,7 +90,7 @@ export default function UserEditor() {
   const handleDelete = async (id) => {
     if (!confirm("Delete this user?")) return;
     try {
-      const res = await fetch(`${BASE_URL}/api/users/${id}`, { method: "DELETE",credentials:"include" });
+      const res = await fetch(`https://vfinserv.in/api/users/${id}`, { method: "DELETE",credentials:"include" });
       if (!res.ok) throw new Error("Delete failed");
       Toastify({ text: "Deleted", backgroundColor: "#38A169" }).showToast();
       fetchUsers();

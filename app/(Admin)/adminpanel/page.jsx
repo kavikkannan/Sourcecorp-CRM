@@ -37,7 +37,7 @@ export default function AdminPanel() {
       {/* Header (always visible) */}
       <header className="fixed top-0 left-0 w-full z-40 bg-white shadow-sm flex items-center justify-between px-6 py-4 border-b border-gray-200 md:hidden">
         <div className="flex items-center gap-2">
-          <span className="text-gray-800 font-bold text-xl tracking-tight">SourceCorp CRM</span>
+          <a href="/home" className="text-gray-800 font-bold text-xl tracking-tight">SourceCorp CRM</a>
         </div>
         <div className="flex items-center gap-4">
           <button
@@ -70,7 +70,7 @@ export default function AdminPanel() {
 
         {/* Sidebar Header (Desktop) */}
         <div className="hidden md:flex items-center justify-center px-6 py-4 border-b border-gray-200">
-          <span className="text-gray-800 font-bold text-xl tracking-tight">SourceCorp CRM</span>
+          <a href="/home" className="text-gray-800 font-bold text-xl tracking-tight">SourceCorp CRM</a>
         </div>
 
         <nav className="mt-6 flex flex-col gap-2 px-4">

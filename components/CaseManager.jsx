@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Toastify from "toastify-js";
-
-const BASE_URL = "https://vfinserv.in";
+import { fetchWithFallback } from "../utils/api";
 
 export default function CaseManager() {
   const [cases, setCases] = useState(null); // Initialize as null
@@ -27,14 +26,12 @@ export default function CaseManager() {
       if (filter.name) params.append("name", filter.name);
       if (filter.status) params.append("status", filter.status);
 
-      const res = await fetch(`${BASE_URL}/api/cases?${params.toString()}`, {
+      const data = await fetchWithFallback(`/api/cases?${params.toString()}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        credentials: "include"
       });
-      if (!res.ok) throw new Error("Failed to load cases");
-      const data = await res.json();
-      console.log(data);
+      if (!data) throw new Error("Failed to load cases");
       setCases(Array.isArray(data) ? data : []);
       setSelectedIds(new Set()); // reset selection
     } catch (e) {
@@ -64,11 +61,11 @@ export default function CaseManager() {
     if (selectedIds.size === 0) return;
     if(selectedIds.size === 1){
       try {
-        const res = await fetch(`${BASE_URL}/api/cases/${Array.from(selectedIds)[0]}`, {
+        const data = await fetchWithFallback(`/api/cases/${Array.from(selectedIds)[0]}`, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
-        if (!res.ok) throw new Error("Delete failed");
+        if (!data) throw new Error("Delete failed");
         Toastify({ text: "Deleted", backgroundColor: "#38A169" }).showToast();
         fetchCases();
       } catch (e) {
@@ -77,16 +74,14 @@ export default function CaseManager() {
       if (!confirm("Delete selected case?")) return;
     }
     else{
-      console.log(Array.from(selectedIds));
       
       try {
-        const res = await fetch(`${BASE_URL}/api/cases/bulk`, {
+        const data = await fetchWithFallback(`/api/cases/bulk`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: Array.from(selectedIds) })
         });
-        if (!res.ok) throw new Error("Delete failed");
-        console.log(res)
+        if (!data) throw new Error("Delete failed");
         Toastify({ text: "Deleted", backgroundColor: "#38A169" }).showToast();
         fetchCases();
       } catch (e) {
@@ -101,7 +96,7 @@ export default function CaseManager() {
     try {
       const ids = Array.from(selectedIds).join(",");
       const link = document.createElement("a");
-      link.href = `${BASE_URL}/api/cases/report?ids=${ids}&format=${format}`;
+      link.href = `/api/cases/report?ids=${ids}&format=${format}`;
       link.target = "_blank";
       link.click();
     } catch (e) {

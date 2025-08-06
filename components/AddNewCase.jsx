@@ -9,14 +9,49 @@ import "react-toastify/dist/ReactToastify.css";
 import Loading from "@/components/Loading";
 import { fetchWithFallback } from "../utils/api";
 
+// A simple hook to check for screen size
+const useMediaQuery = (query) => {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    // Set initial state based on server/client consistency
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) {
+      setMatches(media.matches);
+    }
+    // Listen for changes
+    const listener = () => setMatches(media.matches);
+    window.addEventListener("resize", listener);
+    return () => window.removeEventListener("resize", listener);
+  }, [matches, query]);
+  return matches;
+};
+
+
+// Reusable Agent Details Component
+const AgentDetailsCard = ({ agent, className }) => (
+  <div className={`bg-blue-100/50 p-6 rounded-2xl border border-blue-200 shadow-lg ${className}`}>
+    <h2 className="text-xl font-bold text-gray-800 mb-4">Agent Information</h2>
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-medium text-gray-500">Name</label>
+        <p className="font-semibold text-gray-900">{agent.name || 'N/A'}</p>
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-500">Email</label>
+        <p className="font-semibold text-gray-900">{agent.email || 'N/A'}</p>
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-500">Contact</label>
+        <p className="font-semibold text-gray-900">{agent.contact || 'N/A'}</p>
+      </div>
+    </div>
+  </div>
+);
+
 
 export default function AddNewCase() {
-  const [casename, setCaseName] = useState("New Case!!");
-  const logemail = sessionStorage.getItem("loggedinemail");
-  const lognumber = sessionStorage.getItem("loggedinnumber");
-    const [loading, setLoading] = useState(false);
-  
-  const logname = sessionStorage.getItem("username");
+  const [casename, setCaseName] = useState("");
+  const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState({
     name: "",
     contact: "",
@@ -26,29 +61,27 @@ export default function AddNewCase() {
     countryCode: "+91",
     unknown1: "DSA",
   });
-  const [agent, setAgent] = useState({
-    name: `${logname}`,
-    contact: `${lognumber}`,
-    email: `${logemail}`,
-  });
+  const [agent, setAgent] = useState({ name: '', contact: '', email: '' });
   const [files, setfiles] = useState([]);
   const [showPopup, setShowPopup] = useState(false);
   const [PPass, setPPass] = useState("");
-  const [nooffiles, setNoOfFiles] = useState("");
   const [userid, setUserID] = useState("");
   const router = useRouter();
-  const [isSignedIn, setIsSignedIn] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   useEffect(() => {
-    const logemail = sessionStorage.getItem("loggedinemail");
-    const lognumber = sessionStorage.getItem("loggedinnumber");
     const PPass = sessionStorage.getItem("PPass");
     const NoFF = sessionStorage.getItem("nofi");
     const id = sessionStorage.getItem("userId");
-    setPPass(PPass);
-    setNoOfFiles(NoFF);
-    setUserID(id);
+    const email = sessionStorage.getItem("loggedinemail");
+    const number = sessionStorage.getItem("loggedinnumber");
+    const name = sessionStorage.getItem("username");
+
+    setPPass(PPass || '');
+    setUserID(id || '');
+    setAgent({ name: name || '', contact: number || '', email: email || '' });
   }, []);
 
   function handleFileUpload(event) {
@@ -64,43 +97,26 @@ export default function AddNewCase() {
     const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
     const phoneRegex = /^[0-9]{10,15}$/;
 
-    if (!customer.name.trim()) errors.name = "Name is required.";
+    if (!casename.trim()) errors.caseName = "Case name is required.";
+    if (!customer.name.trim()) errors.name = "Customer name is required.";
     if (!customer.contact.trim()) {
-      errors.contact = "Contact is required.";
+      errors.contact = "Contact number is required.";
     } else if (!phoneRegex.test(customer.contact)) {
-      errors.contact = "Enter valid mobile number (10–15 digits).";
+      errors.contact = "Enter a valid mobile number (10–15 digits).";
     }
-
     if (!customer.email.trim()) {
       errors.email = "Email is required.";
     } else if (!emailRegex.test(customer.email)) {
       errors.email = "Enter a valid email address.";
     }
-    if (files.length === 0) errors.files = "At least 1 file is required.";
-
-    if (!customer.amount.trim()) errors.amount = "Amount is required.";
-    if (casename === "New Case!!" || !casename.trim())
-      errors.caseName = "case name is required / new case name is required";
+    if (!customer.amount.trim() || isNaN(customer.amount)) errors.amount = "A valid amount is required.";
     if (!customer.type.trim()) errors.type = "Loan type is required.";
-    if (!customer.countryCode) errors.countryCode = "Country code is required.";
-
-    if (!agent.name.trim()) errors.agentName = "Agent name is required.";
-    if (!agent.contact.trim()) {
-      errors.agentContact = "Agent contact is required.";
-    } else if (!phoneRegex.test(agent.contact)) {
-      errors.agentContact = "Invalid agent contact number.";
-    }
-
-    if (!agent.email.trim()) {
-      errors.agentEmail = "Agent email is required.";
-    } else if (!emailRegex.test(agent.email)) {
-      errors.agentEmail = "Invalid agent email address.";
-    }
+    if (files.length === 0) errors.files = "At least one document is required.";
 
     setValidationErrors(errors);
-    console.log(errors);
+
     if (Object.keys(errors).length > 0) {
-      toast.error("Please fix the highlighted errors.");
+      toast.error("Please fix the errors before submitting.", { theme: "colored" });
       return;
     }
 
@@ -127,30 +143,32 @@ export default function AddNewCase() {
     }
 
     try {
-      const result = await fetchWithFallback("/api/uploadDocs", {
+      const response = await fetch("https://vfinserv.in/api/uploadDocs", {
         method: "POST",
         body: formData,
       });
 
-      if (result) {
+      const result = await response.json();
+      if (response.ok) {
         console.log("Files uploaded successfully!");
       } else {
-        console.log("Upload failed: No response from server");
+        console.log(`Upload failed: ${result.message}`);
       }
     } catch (error) {
-      console.error("Error uploading files:", error);
+      console.log("Error uploading files");
     }
   };
 
   const handleSync = async (e, CasePfile) => {
-    if (e) e.preventDefault(); // Prevent form submission
+    if (e) e.preventDefault();
 
     const crypto = require("crypto");
 
-    const CHUNK_SIZE = 512; // Define chunk size for JSON
+    const CHUNK_SIZE = 512;
     const PPass = sessionStorage.getItem("PPass");
     const KFile = crypto.randomBytes(32).toString("hex");
-    const numNodes = 4; // Number of nodes
+    const numNodes = 4;
+    const logname = sessionStorage.getItem("username");
 
     function encryptData(data, key) {
       const iv = crypto.randomBytes(16);
@@ -172,150 +190,81 @@ export default function AddNewCase() {
         timestamp: getCurrentTimestamp(),
       },
     ];
-    // Input JSON (Assuming userJson is a JSON object)
-    const jsonData = JSON.stringify(entries, null, 2); // Convert JSON to string
+    const jsonData = JSON.stringify(entries, null, 2);
 
-    // Step 1: Fragment the JSON message
     const fragments = [];
     for (let i = 0; i < jsonData.length; i += CHUNK_SIZE) {
       fragments.push(jsonData.slice(i, i + CHUNK_SIZE));
     }
 
-    // Step 2: Generate NodePattern
-    const NodePattern = [];
-    for (let i = 0; i < fragments.length; i++) {
-      NodePattern.push((i % numNodes) + 1);
-    }
-
-    // Step 3: Encrypt KFile to generate PFile
     const { encryptedData: PFile, iv: PFileIV } = encryptData(
       KFile + "$$" + fragments.length + "@@" + numNodes,
       Buffer.from(PPass, "utf-8").subarray(0, 32)
     );
-    /* const { encryptedData: PFile11, iv: PFileIV11 } = encryptPFile(
-      KFile + "$$" + files.length ,
-      Buffer.from(PPass, "utf-8").subarray(0, 32)
-    ); */
+
     let NoOfFilesStored = 1;
-    const { pi, noo } = genEIForPfile1(CasePfile, NoOfFilesStored);
-    const eindex = pi;
-    const pfile = PFile;
-    const pfileiv = PFileIV;
+    const { pi } = genEIForPfile1(CasePfile, NoOfFilesStored);
 
     try {
-      const response = await fetchWithFallback(
+      await fetchWithFallback(
         `/api/logs/pfile/insert`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({
-            eindex,
-            pfile,
-            pfileiv,
-          }),
+          body: JSON.stringify({ eindex: pi, pfile: PFile, pfileiv: PFileIV }),
         }
       );
-
-      if (response) {
-        console.log("log file success");
-      } else {
-        console.error("Failed to store log file");
-      }
     } catch (error) {
       console.error("Error storing PFile:", error);
     }
 
-    // Convert PFile to a 32-byte buffer key
-    const PFileKey = Buffer.from(
-      crypto.createHash("sha256").update(PFile).digest("hex"),
-      "hex"
-    ).subarray(0, 32);
-
-    // Step 4: Compute InitialIndex
+    const PFileKey = Buffer.from(crypto.createHash("sha256").update(PFile).digest("hex"), "hex").subarray(0, 32);
     const InitialIndex = parseInt(PFile.substring(0, 6), 16) % 100;
 
-    // Step 5: Generate EI (Encrypted Index Array)
     let EI = [];
     for (let n = InitialIndex; n < InitialIndex + fragments.length; n++) {
-      let hash = crypto
-        .createHash("sha256")
-        .update(PFile + n)
-        .digest("hex");
-      EI.push(hash);
+      EI.push(crypto.createHash("sha256").update(PFile + n).digest("hex"));
     }
 
-    // Step 6: Encrypt fragments using PFileKey
-    let EM = [];
-    fragments.forEach((fragment) => {
-      let { encryptedData, iv } = encryptData(fragment, PFileKey);
-      EM.push({ encryptedData, iv });
-    });
+    let EM = fragments.map(fragment => encryptData(fragment, PFileKey));
 
     for (let i = 0; i < fragments.length; i++) {
-      let eindex = EI[i];
-      let emessage = EM[i]["encryptedData"];
-      let iv = EM[i]["iv"];
-
       try {
-        const response = await fetchWithFallback(`/api/insert/k`, {
+        await fetchWithFallback(`/api/insert/k`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            eindex,
-            emessage,
-            iv,
+            eindex: EI[i],
+            emessage: EM[i]["encryptedData"],
+            iv: EM[i]["iv"],
           }),
         });
-
-        if (response.ok) {
-          console.log("Chunk stored successfully");
-        } else {
-          alert("Error storing chunk");
-        }
       } catch (error) {
         console.error("Error storing encrypted JSON chunk:", error);
       }
     }
   };
+
   const genEIForPfile1 = (PPass, n) => {
     const crypto = require("crypto");
     PPass = PPass.toString("hex");
-    let InitialIndex = Buffer.from(
-      crypto.createHash("sha256").update(PPass).digest("hex"),
-      "hex"
-    ).subarray(0, 32);
-
+    let InitialIndex = Buffer.from(crypto.createHash("sha256").update(PPass).digest("hex"), "hex").subarray(0, 32);
     InitialIndex = parseInt(InitialIndex[0]) % 100;
     n += InitialIndex;
-    let PI = crypto
-      .createHash("sha256")
-      .update(PPass + n)
-      .digest("hex");
-    let node = InitialIndex % 4;
-
-    return {
-      pi: PI,
-      noo: node,
-    };
+    let PI = crypto.createHash("sha256").update(PPass + n).digest("hex");
+    return { pi: PI };
   };
 
-  const encryptData = (data) => {
+  const encryptDataForDB = (data) => {
     const jsonString = JSON.stringify(data);
     return CryptoJS.AES.encrypt(jsonString, PPass).toString();
   };
+
   const encryptPFile = (data, key) => {
     try {
-      const iv = crypto
-        .createHash("sha256")
-        .update(data)
-        .digest()
-        .subarray(0, 16);
+      const iv = crypto.createHash("sha256").update(data).digest().subarray(0, 16);
       const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
       const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
       return {
@@ -328,38 +277,18 @@ export default function AddNewCase() {
     }
   };
 
-  const uploadResponse = async (file, casePIndex) => {
-    const formData = new FormData();
-    formData.append("document", file);
-    formData.append("case_pindex", casePIndex);
-
-    try {
-      const response = await fetch("https://vfinserv.in/upload", {
-        method: "POST",
-        body: pindex,
-        email,
-        fileName: file.name,
-        fileUrl: `https://drive.google.com/file/d/${uploadResponse.data.id}/view`,
-      });
-
-      if (response.ok) {
-        console.log("Upload successful");
-      } else {
-        console.error("Upload failed");
-      }
-    } catch (error) {
-      console.error("Error uploading document:", error);
-    }
-  };
   function generateCaseId(userId, noOfFiles) {
     const now = new Date();
     const paddedUserId = String(userId).padStart(3, "0");
     const day = String(now.getDate()).padStart(2, "0");
     const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = String(now.getFullYear()).slice(-2); // '25' from 2025
-    const caseId = `${paddedUserId}${day}${month}${year}${noOfFiles}`;
-    return caseId.toString();
+    const year = String(now.getFullYear()).slice(-2);
+    return `${paddedUserId}${day}${month}${year}${noOfFiles}`;
   }
+  const encryptData = (data) => {
+    const jsonString = JSON.stringify(data);
+    return CryptoJS.AES.encrypt(jsonString, PPass).toString();
+  };
   const confirmSubmission = async () => {
     setLoading(true);
     const encryptedData = encryptData(customer);
@@ -404,14 +333,13 @@ export default function AddNewCase() {
       const coustomerDetails = encryptedData;
       const unknown1 = customer.unknown1;
       const caseDate = formattedDate;
-
-      // Insert user file
-      const response = await fetchWithFallback(
-        "/api/userFile/insert",
+      const response = await fetch(
+        `https://vfinserv.in/api/userFile/insert`,
         {
           method: "POST",
+          mode: "cors",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
+
           body: JSON.stringify({
             pindex,
             Pfile,
@@ -427,349 +355,222 @@ export default function AddNewCase() {
         }
       );
 
-      if (!response) throw new Error("Failed to store case data");
-
-      // Upload files if any
-      if (files && files.length > 0) {
+      if (!response.ok) throw new Error(`Failed to store fragment `);
+      if (response.ok) {
         const files1 = files;
-        const casePIndex = pindex;
+        const casePIndex = pindex; // Replace with dynamic value
         const casename1 = caseName;
-        await uploadFiles(casePIndex, casename1, files1);
+        uploadFiles(casePIndex, casename1, files1);
       }
-
-      // Update number of files
-      const updateResponse = await fetchWithFallback("/api/updateNofiles", {
+    } catch (error) {
+      console.error("Storage error:", error);
+    }
+    try {
+      const id = parseInt(userid);
+      const no_of_files = parseInt(nofff);
+      const response = await fetch(`https://vfinserv.in/api/updateNofiles`, {
         method: "POST",
+        mode: "cors",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
-          id: parseInt(userid, 10),
-          no_of_files: parseInt(nofff, 10),
+          id,
+          no_of_files,
         }),
       });
+      if (response.ok) {
+        const userResponse = await fetch("https://vfinserv.in/api/user", {
+          method: "GET",
+          credentials: "include",
+        });
 
-      if (!updateResponse) {
-        throw new Error("Failed to update file count");
-      }
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          sessionStorage.setItem("userId", userData.ID);
+          sessionStorage.setItem("username", userData.Name);
+          sessionStorage.setItem("isAdmin", userData.IsAdmin);
+          sessionStorage.setItem("nofi", userData.NoOfFiles);
+          sessionStorage.setItem("PPass", userData.PPass);
 
-      // Get updated user data
-      const userData = await fetchWithFallback("/api/user", {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (userData) {
-        sessionStorage.setItem("userId", userData.ID);
-        sessionStorage.setItem("username", userData.Name);
-        sessionStorage.setItem("isAdmin", userData.IsAdmin);
-        sessionStorage.setItem("nofi", userData.NoOfFiles);
-        sessionStorage.setItem("PPass", userData.PPass);
-        router.push("/home");
-      } else {
-        setLoading(false);
-        console.error("Failed to retrieve user information");
+          router.push("/home");
+        } else {
+          setLoading(false);
+          console.error("Failed to retrieve user information");
+        }
+      } else if (!response.ok) {
+        throw new Error(`Failed to store fragment `);
       }
     } catch (error) {
       setLoading(false);
-      console.error("Error in confirmSubmission:", error);
+      console.error("Storage error:", error);
     }
   };
 
-  // Retrieve data and decrypt
-
-  const handleBack = () => {
-    router.push("/home");
-  };
-
+  const handleBack = () => router.push("/home");
+  
   return (
     <>
-      {loading ? (
-        <div>
-          <div className="relative ">
-            <Loading />
+      {loading && <Loading />}
+      <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} />
+      <div className="min-h-screen bg-gradient-to-br from-blue-200 via-white to-orange-200 text-black p-4 md:p-8">
+        <header className="bg-white/80 backdrop-blur-md shadow-lg p-4 flex justify-between items-center rounded-xl mb-8">
+          <div className="flex items-center gap-4">
+            <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <img src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95" alt="SOURCECORP" className="h-10" />
           </div>
-        </div>
-      ) : (
-    <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center bg-gradient-to-br from-blue-200 to-black">
-      <ToastContainer position="top-center" autoClose={3000} />
+          <h1 className="text-xl md:text-3xl font-bold text-gray-800">Create a New Case</h1>
+          <div className="w-16"></div> {/* Spacer */}
+        </header>
 
-      <div className="bg-white w-full p-6 shadow-lg rounded-lg mb-6 border-4 border-orange-500 text-black flex items-center justify-between">
-        {/* Logo and Back Button Section */}
-        <div className="flex items-center gap-4">
-          <button onClick={handleBack}>
-            <div className="text-xl font-extrabold text-gray-800 flex justify-center items-center">
-              <img
-                src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95"
-                alt="SOURCECORP"
-              />
-            </div>
-          </button>
-        </div>
-
-        {/* Main Title Section */}
-        <div className="text-center flex-1">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900">
-            New Case Creation
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Fill in the required details to generate a new case file.
-          </p>
-        </div>
-
-        {/* Optional Right Section: Could be user profile, actions, etc. */}
-        <div className="hidden md:flex items-center gap-2">
-          {/* Placeholder for future actions or user info */}
-        </div>
-      </div>
-
-      <div className="bg-orange-200 p-4  shadow-md border-4 border-orange-500 rounded-lg flex flex-col w-[100vh] justify-between items-center  gap-6">
-        <div>
-          <div className="text-xl text-black ">
-            <input
-              type="text"
-              value={casename}
-              required
-              onChange={(e) => setCaseName(e.target.value)}
-              className="text-center border-b-2 border-l-2 border-r-2 bg-transparent border-orange-400 focus-within:border-blue-600 p-2 w-[150%] rounded-lg text-black"
-              placeholder="Enter Case Name"
-            />
-            {validationErrors["caseName"] && (
-              <p className="text-red-600 text-sm mt-1">
-                {validationErrors["caseName"]}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex w-full">
-          <div className="text-black flex flex-col gap-5 w-[100%] p-2">
-            <h3 className="font-extrabold">Customer Details</h3>
-
-            {/* Text Inputs for name, email, amount */}
-            {["name", "email", "amount"].map((field, index) => (
-              <div key={index} className="w-[50%]">
-                <input
-                  type={field === "email" ? "email" : "text"}
-                  placeholder={field.replace(/\b\w/g, (c) => c.toUpperCase())}
-                  className="border-b-2 border-l-2 bg-transparent border-orange-400 focus:outline-none focus:border-blue-600 p-2 w-full rounded-lg"
-                  value={customer[field]}
-                  required
-                  pattern={
-                    field === "email"
-                      ? "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
-                      : undefined
-                  }
-                  onChange={(e) => {
-                    setCustomer({ ...customer, [field]: e.target.value });
-                    setValidationErrors((prev) => ({ ...prev, [field]: "" }));
-                  }}
-                />
-                {validationErrors[field] && (
-                  <p className="text-red-600 text-sm mt-1">
-                    {validationErrors[field]}
-                  </p>
-                )}
-              </div>
-            ))}
-
-            {/* Contact Field with Country Code Selector */}
-            <div className="flex flex-col w-[50%]">
-              <div className="flex space-x-2 items-center">
-                <select
-                  value={customer.countryCode || "+91"}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, countryCode: e.target.value })
-                  }
-                  className="border-b-2 border-l-2 bg-transparent border-orange-400 focus:outline-none focus:border-blue-600 rounded-lg p-2 w-1/3"
-                  required
-                >
-                  <option value="+91">🇮🇳 +91</option>
-                  <option value="+1">🇺🇸 +1</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+61">🇦🇺 +61</option>
-                  <option value="+971">🇦🇪 +971</option>
-                  {/* Add more countries as needed */}
-                </select>
-                <input
-                  type="tel"
-                  placeholder="Contact"
-                  className="border-b-2 border-l-2 bg-transparent border-orange-400 focus:outline-none focus:border-blue-600 p-2 w-2/3 rounded-lg"
-                  value={customer.contact}
-                  required
-                  pattern="[0-9]{10,15}"
-                  title="Please enter a valid contact number (10–15 digits)."
-                  onChange={(e) => {
-                    setCustomer({
-                      ...customer,
-                      contact: e.target.value.replace(/\D/g, ""),
-                    });
-                    setValidationErrors((prev) => ({ ...prev, contact: "" }));
-                  }}
-                />
-              </div>
-              {validationErrors.contact && (
-                <p className="text-red-600 text-sm mt-1 ml-1">
-                  {validationErrors.contact}
-                </p>
-              )}
-            </div>
-
-            {/* Loan Type Select */}
-            <select
-              className="border-b-2 border-l-2 bg-transparent border-orange-400 focus:outline-none focus:border-blue-600 rounded-lg w-[50%] p-2"
-              value={customer.type}
-              required
-              onChange={(e) =>
-                setCustomer({ ...customer, type: e.target.value })
-              }
-            >
-              <option value="">Select Loan Type</option>
-              <option value="Home Loan">Home Loan</option>
-              <option value="Personal Loan">Personal Loan</option>
-              <option value="Business Loan">Business Loan</option>
-              <option value="Mortgage Loan">Mortgage Loan</option>
-              <option value="Machinery Loan">Machinery Loan</option>
-              <option value="Education Loan">Education Loan</option>
-              <option value="Car Loan">Car Loan</option>
-            </select>
-          </div>
-          <div className="text-black w-[100%] flex flex-col gap-5 p-2">
-            <h3 className="font-semibold">Agent Details</h3>
-            {["name", "contact", "email"].map((field, index) => (
-              <input
-                disabled
-                key={index}
-                type="text"
-                placeholder={`Agent ${field.replace(/\b\w/g, (c) =>
-                  c.toUpperCase()
-                )}`}
-                className="border-b-2 border-l-2 bg-transparent border-orange-400 rounded-lg w-[50%] focus:outline-none focus:border-blue-600 p-2"
-                value={agent[field]}
-                onChange={(e) =>
-                  setAgent({ ...agent, [field]: e.target.value })
-                }
-              />
-            ))}
-            <div>
-              <label>
-                <input
-                  type="radio"
-                  name="unknown1"
-                  value="DSA"
-                  checked={customer.unknown1 === "DSA"}
-                  onChange={() => setCustomer({ ...customer, unknown1: "DSA" })}
-                />{" "}
-                DSA
-              </label>
-              <label className="ml-4">
-                <input
-                  type="radio"
-                  name="unknown1"
-                  value="DST"
-                  checked={customer.unknown1 === "DST"}
-                  onChange={() => setCustomer({ ...customer, unknown1: "DST" })}
-                />{" "}
-                DST
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <h1 className="w-full text-black flex justify-center items-center font-extrabold gap-3 p-10">
-        <span className="h-[2px] w-[35%] bg-orange-400 shadow shadow-black"></span>{" "}
-        Documentation{" "}
-        <span className="h-[2px] w-[35%] bg-orange-400 shadow shadow-black"></span>
-      </h1>
-
-      <div className="bg-white p-4 w-[50rem] shadow-md rounded-lg flex justify-between items-center text-black border-2 border-black">
-        <label className="cursor-pointer bg-blue-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-600">
-          Choose Files
-          <input
-            type="file"
-            multiple
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
-
-        <span className="text-gray-700">
-          {files.length > 0
-            ? `${files.length} file(s) selected`
-            : "No files chosen"}
-        </span>
-
-        <div className="overflow-y-auto min-h-10 min-w-60 max-h-32 border-2 border-black w-1/3 rounded-2xl shadow-black p-4">
-          {files.length > 0 ? (
-            files.map((doc, index) => (
-              <div key={index} className="flex justify-between items-center">
-                <p className="text-sm truncate">{doc.name}</p>
-                <button
-                  onClick={() => removeDocument(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  ✖
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-500 text-sm text-center">No files chosen</p>
+        <div className="lg:grid lg:grid-cols-12 lg:gap-8 max-w-7xl mx-auto">
+          {/* Agent Details - Desktop Left Sidebar */}
+          {isDesktop && (
+            <aside className="lg:col-span-4 xl:col-span-3">
+              <AgentDetailsCard agent={agent} className="sticky top-28"/>
+            </aside>
           )}
+
+          {/* Main Form */}
+          <main className="lg:col-span-8 xl:col-span-9">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl p-6 md:p-8 space-y-8">
+              
+              <div className="border-b pb-6">
+                <h2 className="text-xl font-semibold text-gray-700 mb-4">Case Details</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Case Name Input */}
+                    <div>
+                        <label htmlFor="caseName" className="block text-sm font-medium text-gray-700 mb-1">Case Name</label>
+                        <input
+                            id="caseName"
+                            value={casename}
+                            onChange={e => setCaseName(e.target.value)}
+                            placeholder="e.g., John Doe - Personal Loan"
+                            required
+                            className={`w-full p-2 border ${validationErrors.caseName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500`}
+                        />
+                        {validationErrors.caseName && <p className="text-red-600 text-xs mt-1">{validationErrors.caseName}</p>}
+                    </div>
+
+                    {/* Loan Amount Input */}
+                    <div>
+                        <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">Loan Amount (₹)</label>
+                        <input
+                            id="amount"
+                            type="number"
+                            value={customer.amount}
+                            onChange={e => setCustomer({ ...customer, amount: e.target.value })}
+                            placeholder="e.g., 500000"
+                            required
+                            className={`w-full p-2 border ${validationErrors.amount ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500`}
+                        />
+                        {validationErrors.amount && <p className="text-red-600 text-xs mt-1">{validationErrors.amount}</p>}
+                    </div>
+                    
+                    {/* Loan Type Select */}
+                    <div>
+                      <label htmlFor="loanType" className="block text-sm font-medium text-gray-700 mb-1">Loan Type</label>
+                      <select id="loanType" value={customer.type} onChange={e => setCustomer({ ...customer, type: e.target.value })} required className={`w-full p-2 border ${validationErrors.type ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500`}>
+                        <option value="">Select Loan Type</option>
+                        <option value="Home Loan">Home Loan</option><option value="Personal Loan">Personal Loan</option><option value="Business Loan">Business Loan</option><option value="Mortgage Loan">Mortgage Loan</option><option value="Machinery Loan">Machinery Loan</option><option value="Education Loan">Education Loan</option><option value="Car Loan">Car Loan</option>
+                      </select>
+                      {validationErrors.type && <p className="text-red-600 text-xs mt-1">{validationErrors.type}</p>}
+                    </div>
+                    
+                    {/* Source Type Radio */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Source Type</label>
+                      <div className="flex gap-4 p-2 bg-gray-100 rounded-md"><label className="flex items-center gap-2"><input type="radio" name="unknown1" value="DSA" checked={customer.unknown1 === "DSA"} onChange={() => setCustomer({ ...customer, unknown1: "DSA" })} className="form-radio text-blue-600"/> DSA</label><label className="flex items-center gap-2"><input type="radio" name="unknown1" value="DST" checked={customer.unknown1 === "DST"} onChange={() => setCustomer({ ...customer, unknown1: "DST" })} className="form-radio text-blue-600"/> DST</label></div>
+                    </div>
+                </div>
+              </div>
+
+              <div className="border-b pb-6">
+                <h2 className="text-xl font-semibold text-gray-700 mb-4">{isDesktop ? "Customer Details" : "Customer & Agent Details"}</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Customer Name Input */}
+                    <div>
+                        <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                        <input
+                            id="customerName"
+                            value={customer.name}
+                            onChange={e => setCustomer({ ...customer, name: e.target.value })}
+                            placeholder="John Doe"
+                            required
+                            className={`w-full p-2 border ${validationErrors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500`}
+                        />
+                        {validationErrors.name && <p className="text-red-600 text-xs mt-1">{validationErrors.name}</p>}
+                    </div>
+
+                    {/* Customer Email Input */}
+                    <div>
+                        <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                        <input
+                            id="customerEmail"
+                            type="email"
+                            value={customer.email}
+                            onChange={e => setCustomer({ ...customer, email: e.target.value })}
+                            placeholder="john.doe@example.com"
+                            required
+                            className={`w-full p-2 border ${validationErrors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500`}
+                        />
+                        {validationErrors.email && <p className="text-red-600 text-xs mt-1">{validationErrors.email}</p>}
+                    </div>
+
+                    {/* Customer Contact Input */}
+                    <div>
+                      <label htmlFor="customerContact" className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
+                      <div className="flex">
+                          <select value={customer.countryCode} onChange={e => setCustomer({ ...customer, countryCode: e.target.value })} className="p-2 border border-r-0 border-gray-300 rounded-l-md bg-gray-50 focus:outline-none">
+                              <option value="+91">🇮🇳 +91</option><option value="+1">🇺🇸 +1</option>
+                          </select>
+                          <input id="customerContact" type="tel" value={customer.contact} onChange={e => setCustomer({ ...customer, contact: e.target.value.replace(/\D/g, "") })} placeholder="9876543210" required className={`w-full p-2 border ${validationErrors.contact ? 'border-red-500' : 'border-gray-300'} rounded-r-md shadow-sm focus:ring-blue-500 focus:border-blue-500`} />
+                      </div>
+                      {validationErrors.contact && <p className="text-red-600 text-xs mt-1">{validationErrors.contact}</p>}
+                    </div>
+                    
+                </div>
+                <br/>
+                {!isDesktop && <AgentDetailsCard agent={agent} className="mb-6"/> }
+
+              </div>
+              
+              <div>
+                <h2 className="text-xl font-semibold text-gray-700 mb-4">Documentation</h2>
+                <div className={`p-6 border-2 ${validationErrors.files ? 'border-red-500' : 'border-gray-300'} border-dashed rounded-lg text-center`}>
+                  <input type="file" multiple onChange={handleFileUpload} id="fileUpload" className="hidden"/>
+                  <label htmlFor="fileUpload" className="cursor-pointer text-blue-600 font-semibold">Drag & drop files here, or click to browse</label>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, PDF, etc.</p>
+                  {validationErrors.files && <p className="text-red-600 text-sm mt-2">{validationErrors.files}</p>}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {files.map((file, index) => (<div key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded-md text-sm"><span>{file.name}</span><button onClick={() => removeDocument(index)} className="text-red-500 hover:text-red-700 font-bold">&times;</button></div>))}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <button onClick={handleSubmit} className="bg-orange-500 text-white font-bold px-8 py-3 rounded-lg shadow-lg hover:bg-green-600 transition-all transform hover:scale-105">Create Case</button>
+              </div>
+            </div>
+          </main>
         </div>
-        {validationErrors["files"] && (
-          <p className="text-red-600 text-sm mt-1">
-            {validationErrors["files"]}
-          </p>
+
+        {showPopup && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Confirm Case Details</h2>
+              <div className="space-y-2 text-gray-600">
+                <p><strong>Case Name:</strong> {casename}</p><p><strong>Customer:</strong> {customer.name}</p><p><strong>Contact:</strong> {customer.contact}</p><p><strong>Amount:</strong> ₹{parseFloat(customer.amount).toLocaleString('en-IN')}</p><p><strong>Loan Type:</strong> {customer.type}</p><p><strong>Documents:</strong> {files.length} file(s) attached</p><p><strong>Agent:</strong> {agent.name}</p>
+              </div>
+              <div className="flex justify-between mt-6">
+                <button onClick={() => setShowPopup(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400">Make Changes</button>
+                <button onClick={confirmSubmission} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-semibold">Confirm & Submit</button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
-
-      <div className="flex justify-center mt-6">
-        <button
-          onClick={handleSubmit}
-          className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-        >
-          Create Case
-        </button>
-      </div>
-
-      {showPopup && (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center text-black">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-1/3">
-            <h2 className="text-lg font-bold mb-4">Confirm Case Creation</h2>
-            <p>
-              <strong>Case Name:</strong> {casename}
-            </p>
-            <p>
-              <strong>Customer:</strong> {customer.name}, {customer.contact},{" "}
-              {customer.email}
-            </p>
-            <p>
-              <strong>Agent:</strong> {agent.name}, {agent.contact},{" "}
-              {agent.email}
-            </p>
-            <p>
-              <strong>Type:</strong> {customer.unknown1}
-            </p>
-            <p>
-              <strong>files:</strong> {files.length} files uploaded
-            </p>
-            <div className="flex justify-between mt-4">
-              <button
-                onClick={() => setShowPopup(false)}
-                className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600"
-              >
-                Make Changes
-              </button>
-              <button
-                onClick={confirmSubmission}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-    )}
     </>
   );
 }
