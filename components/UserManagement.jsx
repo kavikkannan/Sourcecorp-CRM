@@ -118,8 +118,8 @@ const handleRemoveAppointed = async (UserID, memberID) => {
         MemberID: String(memberID)
       })
     });
-
-    if (response.ok) {
+    console.log(response);
+    if (response) {
       // Update the local state to reflect the removal
       setUsers(prev => prev.map(u => 
         u.ID === UserID 
@@ -130,7 +130,7 @@ const handleRemoveAppointed = async (UserID, memberID) => {
           : u
       ));
     } else {
-      const errorData = await response.json();
+      const errorData = response;
       console.error("Failed to remove appointed member:", errorData.message);
       // Optionally, show an error message to the user
     }
