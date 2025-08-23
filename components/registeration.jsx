@@ -4,6 +4,7 @@ import { fetchWithFallback } from "../utils/api";
 import Link from "next/link";
 import React, { useState } from "react";
 import LoadingAnimation from "@/components/Loading";
+import { toast } from "react-toastify";
 
 export default function Reg() {
   const [loading, setLoading] = useState(false);
@@ -49,14 +50,16 @@ export default function Reg() {
   
       if (response) {
         console.log("User registered successfully");
-        router.push("/login");
+        //router.push("/login");
+        toast.success("User registered successfully");
       } else {
         const errorData = await response.json();
         console.error("Registration failed:", errorData);
-        alert(errorData.message || "Registration not successful");
+        toast.error(errorData.message || "Registration not successful");
       }
     } catch (error) {
       console.error("Error during registration:", error);
+      toast.error("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -154,9 +157,12 @@ export default function Reg() {
                   >
                     <option value="" disabled>Select a role</option>
                     <option value="super_admin">Super Admin </option>
+                    <option value="managing_director">Managing Director </option>
+                    <option value="director">Director </option>
                     <option value="operation_head">Operation Head</option>
                     <option value="backend_team">Backend Team</option>
                     <option value="management_team">Management Team</option>
+                    <option value="assistant_management_team">Assistant Management Team</option>
                     <option value="branch_manager">Branch Manager</option>
                     <option value="team_leader">Team Leader</option>
                     <option value="executive">Employee</option>

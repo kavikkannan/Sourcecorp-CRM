@@ -158,7 +158,7 @@ export default function UserEditor() {
         <div>
           <label className="block text-sm font-medium text-blue-700">Role</label>
           <select className="w-full border border-orange-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-orange-400" value={form.Role} onChange={e => setForm({ ...form, Role: e.target.value })}>
-            {["super_admin","operation_head","backend_team","management_team","branch_manager","team_leader","executive"].map(r => <option key={r}>{r}</option>)}
+            {["super_admin","managing_director","director","assistant_management_team","operation_head","backend_team","management_team","branch_manager","team_leader","executive"].map(r => <option key={r}>{r}</option>)}
           </select>
         </div>
 

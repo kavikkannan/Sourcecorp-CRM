@@ -150,7 +150,7 @@ const handleRemoveAppointed = async (UserID, memberID) => {
           onChange={(e) => setRole(e.target.value)}
         >
           <option value="">Select Role</option>
-          {["super_admin","operation_head", "backend_team", "management_team", "branch_manager", "team_leader", "executive"].map(
+          {["super_admin","managing_director","director","assistant_management_team","operation_head", "backend_team", "management_team", "branch_manager", "team_leader", "executive"].map(
             (r) => (
               <option key={r} value={r}>
                 {r.toUpperCase()}

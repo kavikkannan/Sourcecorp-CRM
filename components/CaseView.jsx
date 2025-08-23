@@ -112,7 +112,7 @@ export default function ViewCase() {
             if (userRes.ok) {
               return await userRes.json(); // Return user details
             }
-            console.error(`Failed to fetch user details for ID: ${id}`);
+            console.log(`Failed to fetch user details for ID: ${id}`);
             return null;
           })
         );
@@ -524,6 +524,7 @@ export default function ViewCase() {
                 ) : (
                     <div className="space-y-2">
                         <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md">
+                            <option value="" disabled>Select a status</option>
                             {statuses.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                         <div className="flex gap-2">
@@ -543,7 +544,7 @@ export default function ViewCase() {
                     <div className="p-4 border-t grid grid-cols-2 gap-4 text-sm">
                         <div><strong className="block text-gray-500">Name</strong>{customerDetails.name}</div>
                         <div><strong className="block text-gray-500">Contact</strong>{customerDetails.contact}</div>
-                        <div><strong className="block text-gray-500">Email</strong>{customerDetails.email}</div>
+                        <div className="col-span-2 break-words"><strong className="block text-gray-500">Email</strong>{customerDetails.email}</div>
                         <div><strong className="block text-gray-500">Loan Amount</strong>₹{customerDetails.amount}</div>
                         <div><strong className="block text-gray-500">Loan Type</strong>{customerDetails.type}</div>
                         <div><strong className="block text-gray-500">Source</strong>{customerDetails.unknown1}</div>
@@ -721,7 +722,6 @@ export default function ViewCase() {
                             <div className="absolute -left-[34px] top-1 flex items-center justify-center">
                                 <span className="absolute w-4 h-4 bg-orange-400 rounded-full border-4 border-white"></span>
                                 <div className={`flex items-center justify-center w-10 h-10 rounded-full text-white font-bold text-sm ${nameToColor(entry.user)}`}>
-                                    {getInitials(isYou ? "You" : entry.user)}
                                 </div>
                             </div>
 

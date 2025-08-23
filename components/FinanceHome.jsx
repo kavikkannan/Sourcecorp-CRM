@@ -42,9 +42,9 @@ export default function HomePage() {
   const filteredUsers = appointedUsers.filter(
     (user) =>
       (selectedRole === "All" || user.Role === selectedRole) &&
-      (selectedUser === "all" || user.Name === selectedUser) &&
-      (user.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.Email.toLowerCase().includes(searchTerm.toLowerCase()))
+      (selectedUser === "all" || user.ID === selectedUser) &&
+      ((user.Name?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
+        user.Email?.toLowerCase()?.includes(searchTerm.toLowerCase())) ?? false)
   );
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
@@ -363,6 +363,7 @@ export default function HomePage() {
 
       // Set state only if there are valid users and cases
       setAppointedUsersCases(appointedCases);
+      console.log(validUserDetails);
       setAppointedUsers(validUserDetails);
       setMiniLoading(false);
     } catch (error) {
@@ -689,7 +690,11 @@ export default function HomePage() {
                   <input type="text" placeholder="Search by name or email" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400" />
                   <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400">
                     <option value="all">All Users</option>
-                    {appointedUsers.map((user) => <option key={user.ID} value={user.Name}>{user.Name}</option>)}
+                    {appointedUsers.map((user) => (
+                      <option key={user.ID} value={user.ID}>
+                        {user.Name}
+                      </option>
+                    ))}
                   </select>
                   <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400">
                     {roles.map((role) => <option key={role} value={role}>{role}</option>)}
