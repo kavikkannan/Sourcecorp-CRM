@@ -6,10 +6,22 @@ import CaseManager from "@/components/CaseManager";
 import RegisterationPage from "@/components/registeration";
 import DecryptionDashboard from "@/components/DecryptionDashboard";
 import CryptoJS from 'crypto-js';
+
 const DecryptSection = () => {
   const [cases, setCases] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [excludedCaseIdsInput, setExcludedCaseIdsInput] = useState('');
+
+  // Predefined array of case IDs to exclude
+  const excludedCaseIds = [
+    '0071608253',
+    '0070808251',
+    '0071108252',
+    '0072108255',
+    '0072008254',
+    // Add more case IDs to exclude as needed
+  ];
 
   const fetchUserPassword = async (userId) => {
     try {
@@ -25,61 +37,91 @@ const DecryptSection = () => {
     }
   };
 
-  const decryptData = (encryptedData,PPass) => {
+  const decryptData = (encryptedData, PPass) => {
+
+    
+    if (!encryptedData || !PPass) {
+      console.error("Missing encrypted data or password");
+      return { amount: 0 };
+    }
+
     try {
       const bytes = CryptoJS.AES.decrypt(encryptedData, PPass);
       const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-      return JSON.parse(decryptedText);
+      
+      if (!decryptedText) {
+        console.error("Decryption resulted in empty string");
+        return { amount: 0 };
+      }
+
+      try {
+        const parsed = JSON.parse(decryptedText);
+        return parsed.amount !== undefined ? parsed : { amount: 0 };
+      } catch (e) {
+        console.error("Failed to parse decrypted data as JSON, trying to parse as number");
+        const amount = parseFloat(decryptedText);
+        return { amount: isNaN(amount) ? 0 : amount };
+      }
     } catch (error) {
       console.error("Decryption failed:", error);
-      return null;
+      return { amount: 0 };
     }
   };
 
+  const fetchAndProcessCases = async () => {
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch('https://vfinserv.in/api/process_amounts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch cases');
+      }
+      
+      const data = await response.json();
+      if (data.status === 'success') {
+        // Parse the comma-separated list of case IDs to exclude
+        const excludedIds = excludedCaseIdsInput
+          .split(',')
+          .map(id => id.trim())
+          .filter(id => id);
+
+        // Filter out excluded case IDs before processing
+        const filteredCases = data.data.filter(
+          caseItem => !excludedIds.includes(caseItem.caseId) && !excludedCaseIds.includes(caseItem.caseId)
+        );
+
+        const casesWithPasswords = await Promise.all(
+          filteredCases.map(async (caseItem) => {
+            const password = await fetchUserPassword(caseItem.agentId);
+            const d = decryptData(caseItem.encryptedData, password);
+            return {
+              ...caseItem,
+              status: 'pending',
+              password,
+              decryptedData: d.amount
+            };
+          })
+        );
+        
+        setCases(casesWithPasswords);
+      } else {
+        throw new Error(data.message || 'Failed to load cases');
+      }
+    } catch (err) {
+      console.error('Error fetching cases:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAndProcessCases = async () => {
-      try {
-        // First, fetch all cases
-        const response = await fetch('https://vfinserv.in/api/process_amounts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch cases');
-        }
-        
-        const data = await response.json();
-        if (data.status === 'success') {
-          // For each case, fetch the user's password
-          const casesWithPasswords = await Promise.all(
-            data.data.map(async (caseItem) => {
-              const password = await fetchUserPassword(caseItem.agentId);
-              const d = decryptData(caseItem.encryptedData, password);
-              return {
-                ...caseItem,
-                status: 'pending',
-                password, // Store the password with the case
-                decryptedData: d.amount
-              };
-            })
-          );
-          console.log(casesWithPasswords);
-          setCases(casesWithPasswords);
-        } else {
-          throw new Error(data.message || 'Failed to load cases');
-        }
-      } catch (err) {
-        console.error('Error fetching cases:', err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchAndProcessCases();
   }, []);
 
@@ -102,7 +144,7 @@ const DecryptSection = () => {
       // Send each update to the API
       const results = await Promise.all(
         validUpdates.map(update =>
-          fetch('https://vfinserv.in/case/amount', {
+          fetch('https://vfinserv.in/api/amount', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -162,7 +204,7 @@ const DecryptSection = () => {
       if (!caseItem.password) {
         throw new Error('No password available for this case');
       }
-      
+      console.log("handle decrypt me enteringgggg")
       // Decrypt the data using the stored password
       const decryptedData = decryptData(caseItem.encryptedData, caseItem.password);
       
@@ -223,12 +265,35 @@ const DecryptSection = () => {
   }
 
   return (
-    <DecryptionDashboard 
-      cases={cases}
-      onDecrypt={(caseItem) => handleDecrypt(caseItem)}
-    />
+    <div>
+      <div style={{ marginBottom: '1rem' }}>
+        <label>
+          Exclude Case IDs (comma-separated):
+          <input
+            type="text"
+            value={excludedCaseIdsInput}
+            onChange={(e) => setExcludedCaseIdsInput(e.target.value)}
+            placeholder="e.g., 12345, 67890"
+            style={{ marginLeft: '0.5rem', padding: '0.5rem' }}
+          />
+        </label>
+        <button 
+          onClick={fetchAndProcessCases}
+          disabled={isLoading}
+          style={{ marginLeft: '1rem', padding: '0.5rem 1rem' }}
+        >
+          {isLoading ? 'Processing...' : 'Refresh Cases'}
+        </button>
+      </div>
+      <DecryptionDashboard 
+        cases={cases}
+        onDecrypt={(caseItem) => handleDecrypt(caseItem)}
+      />
+    </div>
   );
 };
+
+
 
 const COMPONENTS = {
   usermanagement: <UserManagement />,

@@ -66,13 +66,26 @@ export default function HomePage() {
 
   const fetchTeamCaseAmounts = async () => {
     try {
-      // This is a placeholder for your actual API call
-      const data = await fetchWithFallback(`/api/fetch_amount`);
-      if (data) {
-        setTeamCaseAmount(data);
+      const response = await fetchWithFallback(`/api/fetch_amount`);
+      
+      if (response && Array.isArray(response)) {
+        // Set the array of case amounts if you need to use individual amounts
+        setTeamCaseAmount(response);
+        
+        // Calculate total amount if needed
+        const total = response.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        
+        // If you want to store the total in state
+        // setTotalAmount(total);
+      } else if (response && response.error) {
+        console.error("Error from server:", response.error);
+      } else {
+        console.log("No case amounts found");
+        setTeamCaseAmount([]);
       }
     } catch (error) {
       console.error("Error fetching team case amounts:", error);
+      setTeamCaseAmount([]);
     }
   };
 
@@ -378,16 +391,21 @@ export default function HomePage() {
   const teamCasesSummary = useMemo(() => {
     const summary = { "New Case": 0, "Login Case": 0, "Underwriting Case": 0, "Approved Case": 0, "Disbursed Case": 0, "Rejected Case": 0 };
     
-    // Handle single object case
+    // Create a map of caseId to amount from teamCaseAmount array
     const amountMap = new Map();
-    if (teamCaseAmount && teamCaseAmount.caseId) {
-      amountMap.set(String(teamCaseAmount.caseId), parseFloat(teamCaseAmount.amount) || 0);
+    if (Array.isArray(teamCaseAmount)) {
+      teamCaseAmount.forEach(({ caseId, amount }) => {
+        if (caseId) {
+          amountMap.set(String(caseId), parseFloat(amount) || 0);
+        }
+      });
     }
     
-    
+    // Process appointed cases and accumulate amounts
     Object.values(appointedCases).flat().forEach(({ CaseId, Status }) => {
       if (summary.hasOwnProperty(Status)) {
         const amount = amountMap.get(String(CaseId)) || 0;
+        // For New/Login cases, count as 1, for others add the amount
         summary[Status] += (Status === "New Case" || Status === "Login Case") ? 1 : amount;
       }
     });
