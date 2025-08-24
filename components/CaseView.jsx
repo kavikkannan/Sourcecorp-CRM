@@ -519,13 +519,30 @@ export default function ViewCase() {
                 {!showStatusEditor ? (
                     <div className="flex justify-between items-center">
                         <span className="px-3 py-1 text-sm font-semibold rounded-full bg-orange-100 text-orange-800">{caseData.Status}</span>
-                        <button onClick={() => setShowStatusEditor(true)} className="text-sm text-blue-600 hover:underline">Change</button>
+                        <button 
+                            onClick={() => {
+                                setSelectedStatus("");
+                                setShowStatusEditor(true);
+                            }} 
+                            className="text-sm text-blue-600 hover:underline"
+                        >
+                            Change
+                        </button>
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md">
+                        <select 
+                            value={selectedStatus || ""}
+                            onChange={(e) => setSelectedStatus(e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded-md"
+                            required
+                        >
                             <option value="" disabled>Select a status</option>
-                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                            {statuses.map(s => (
+                                <option key={s} value={s}>
+                                    {s}
+                                </option>
+                            ))}
                         </select>
                         <div className="flex gap-2">
                             <button onClick={handleUpdateStatus} className="flex-1 bg-blue-600 text-white text-sm py-1 rounded-md">Save</button>

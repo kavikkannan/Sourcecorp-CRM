@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SparklesCore from "./Sparkels"; // Assuming SparklesCore component is in the same directory
-
+import BirthdayGreetingOverlay from "./BirthdayGreetingOverlay";
 // Icon helper for SVG paths
 const Icon = ({ path, className = "w-6 h-6" }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -94,7 +94,8 @@ const LandingPage = () => {
 
   return (
     <div className="relative bg-gradient-to-br from-blue-50 via-white to-orange-50 text-gray-800 font-sans">
-        {/* Sparkles Background - Added Back In */}
+        {/* <BirthdayGreetingOverlay/>
+        Sparkles Background - Added Back In */}
         <div className="absolute inset-0 pointer-events-none z-0">
             <SparklesCore
                 id="tsparticlesfullpage"

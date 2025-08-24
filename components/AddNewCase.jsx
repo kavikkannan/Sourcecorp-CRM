@@ -333,6 +333,7 @@ export default function AddNewCase() {
       const coustomerDetails = encryptedData;
       const unknown1 = customer.unknown1;
       const caseDate = formattedDate;
+      const amount = customer.amount;
       const response = await fetch(
         `https://vfinserv.in/api/userFile/insert`,
         {
@@ -351,6 +352,7 @@ export default function AddNewCase() {
             unknown1,
             caseDate,
             caseId,
+            amount,
           }),
         }
       );

@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import crypto from "crypto";
 import CryptoJS from "crypto-js";
@@ -31,6 +31,7 @@ export default function HomePage() {
   const [readCount, setReadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [miniLoading, setMiniLoading] = useState(false);
+  const [teamCaseAmount, setTeamCaseAmount] = useState([]);
 
   const [viewCompleted, setViewCompleted] = useState(false); // false = Ongoing
   const filteredNotifications = notifications.filter(
@@ -58,14 +59,22 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (appointedUsers) {
-    }
-  }, [appointedUsers]);
-
-  useEffect(() => {
     fetchNotifications();
     fetchCases();
+    fetchTeamCaseAmounts();
   }, []);
+
+  const fetchTeamCaseAmounts = async () => {
+    try {
+      // This is a placeholder for your actual API call
+      const data = await fetchWithFallback(`/api/fetch_amount`);
+      if (data) {
+        setTeamCaseAmount(data);
+      }
+    } catch (error) {
+      console.error("Error fetching team case amounts:", error);
+    }
+  };
 
   const handleNotifyRefresh = () => {
     fetchNotifications();
@@ -258,39 +267,11 @@ export default function HomePage() {
       if (validCases.length > 0) {
         setCases(validCases);
       } else {
-        // Set fallback case with "nil" values
-        setCases([
-          {
-            AgentId: "nil",
-            CaseDate: "nil",
-            CaseId: "nil",
-            CoustomerDetails: "nil",
-            Name: "nil",
-            PFile: "nil",
-            PIV: "nil",
-            PIndex: "nil",
-            Status: "nil",
-            Unknown1: "nil",
-          },
-        ]);
+        setCases([]);
       }
     } catch (error) {
       console.log("Error fetching cases:", error);
-      // Optional: fallback in case of complete failure
-      setCases([
-        {
-          AgentId: "nil",
-          CaseDate: "nil",
-          CaseId: "nil",
-          CoustomerDetails: "nil",
-          Name: "nil",
-          PFile: "nil",
-          PIV: "nil",
-          PIndex: "nil",
-          Status: "nil",
-          Unknown1: "nil",
-        },
-      ]);
+      setCases([]);
     }
   }
 
@@ -298,82 +279,45 @@ export default function HomePage() {
     setMiniLoading(true);
     const userId = sessionStorage.getItem("userId");
     try {
-      // Fetch appointed members
       const data = await fetchWithFallback(`/api/appointedUser/${userId}`);
-
-      if (!data) {
-        console.log("Failed to fetch schedule");
-        return;
-      }
-
-      if (!data.hierarchy || data.hierarchy.trim() === "") {
+      if (!data || !data.hierarchy || data.hierarchy.trim() === "") {
         console.log("No appointed members found.");
+        setMiniLoading(false);
         return;
       }
 
       setAPPSchedu(data.hierarchy);
-
-      // Extract unique user IDs from comma-separated string
-      const userIds = [
-        ...new Set(
-          data.hierarchy
-            .split(",")
-            .map((id) => id.trim())
-            .filter((id) => id) // Remove empty values
-        ),
-      ];
-
+      const userIds = [...new Set(data.hierarchy.split(",").map((id) => id.trim()).filter((id) => id))];
       if (userIds.length === 0) {
         console.log("No valid user IDs found.");
+        setMiniLoading(false);
         return;
       }
 
-      // Fetch details for each unique user ID
-      const userDetails = await Promise.all(
-        userIds.map(async (id) => {
-          try {
-            return await fetchWithFallback(`/api/user/${id}`);
-          } catch (error) {
-            console.error(`Failed to fetch user details for ID: ${id}`, error);
-            return null;
-          }
-        })
-      );
-
-      // Filter out null values
-      const validUserDetails = userDetails.filter((user) => user);
-      if (validUserDetails.length === 0) {
+      const userDetails = (await Promise.all(userIds.map(id => fetchWithFallback(`/api/user/${id}`)))).filter(Boolean);
+      if (userDetails.length === 0) {
         console.log("No valid user details found.");
+        setMiniLoading(false);
         return;
       }
 
-      // Fetch cases for each valid user ID and store them under their respective IDs
-      const appointedCases = await userIds.reduce(async (accPromise, id) => {
+      const appointedCasesData = await userIds.reduce(async (accPromise, id) => {
         const acc = await accPromise;
-        try {
-          const userCases = await fetchWithFallback(`/api/userFile/fetchbyid/${id}`);
-          if (Array.isArray(userCases) && userCases.length > 0) {
-            acc[id] = userCases;
-          }
-        } catch (error) {
-          console.error(`Failed to fetch cases for user ID: ${id}`, error);
-        }
+        const userCases = await fetchWithFallback(`/api/userFile/fetchbyid/${id}`);
+        if (Array.isArray(userCases) && userCases.length > 0) acc[id] = userCases;
         return acc;
       }, Promise.resolve({}));
 
-      // Set state only if there are valid users and cases
-      setAppointedUsersCases(appointedCases);
-      console.log(validUserDetails);
-      setAppointedUsers(validUserDetails);
-      setMiniLoading(false);
+      setAppointedUsersCases(appointedCasesData);
+      setAppointedUsers(userDetails);
     } catch (error) {
       console.error("Error in handleGetAppointedMembers:", error);
+    } finally {
       setMiniLoading(false);
     }
   };
 
   const handelNewCase = () => {
-    console.log(true);
     router.push("/newcasepage");
   };
   const filteredCases = cases.filter((c) => {
@@ -387,20 +331,14 @@ export default function HomePage() {
     return statusMatch && monthMatch;
   });
 
-  const handleIsYourCase = () => {
-    setIsYourCase(true);
-  };
-  const handleIsTeamCase = () => {
-    setIsYourCase(false);
-  };
+  const handleIsYourCase = () => setIsYourCase(true);
+  const handleIsTeamCase = () => setIsYourCase(false);
 
   const updateNotifyStatus = async (id, readStatus, mark) => {
     try {
-      const response = await fetchWithFallback(`/api/userFile/updateNotifyStatus`, {
+      await fetchWithFallback(`/api/userFile/updateNotifyStatus`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id,
           readStatus: typeof readStatus === 'string' ? readStatus === 'true' : readStatus,
@@ -408,12 +346,7 @@ export default function HomePage() {
         }),
         credentials: "include"
       });
-
-      if (response) {
-        await fetchNotifications();
-      } else {
-        console.error("Failed to update notification status");
-      }
+      await fetchNotifications();
     } catch (error) {
       console.error("Failed to update notification:", error);
     }
@@ -421,165 +354,113 @@ export default function HomePage() {
   const decryptData = (encryptedData) => {
     try {
       const bytes = CryptoJS.AES.decrypt(encryptedData, PPass);
-      const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-      return JSON.parse(decryptedText); // Convert back to JSON object
+      return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
     } catch (error) {
       console.error("Decryption failed:", error);
       return null;
     }
   };
-  const handleFetchCustomerDetails = () => {
-    if (caseData.CoustomerDetails) {
-      const decryptedCustomerData = decryptData(caseData.CoustomerDetails);
-      if (decryptedCustomerData) {
-        setCustomerDetails(decryptedCustomerData);
-      } else {
-        alert("Failed to decrypt customer details.");
-      }
-    } else {
-      alert("No customer details found.");
-    }
-  };
 
-  const Summary = {
-    "New Case": 0,
-    "Login Case": 0,
-    "Underwriting Case": 0,
-    "Approved Case": 0,
-    "Disbursed Case": 0,
-    "Rejected Case": 0,
-  };
-
-  cases.forEach(({ CaseId, Status, CoustomerDetails }) => {
-    if (CoustomerDetails && CoustomerDetails != 'nil') {
-      console.log("coustomer details found")
-      const customer = decryptData(CoustomerDetails);
-      const amount = parseFloat(customer.amount) || 0;
-
-      if (Summary.hasOwnProperty(Status)) {
-        if (Status === "New Case" || Status === "Login Case") {
-          Summary[Status] += 1;
-        } else {
-          Summary[Status] += amount;
+  const yourCasesSummary = useMemo(() => {
+    const summary = { "New Case": 0, "Login Case": 0, "Underwriting Case": 0, "Approved Case": 0, "Disbursed Case": 0, "Rejected Case": 0 };
+    cases.forEach(({ Status, CoustomerDetails }) => {
+      if (CoustomerDetails && CoustomerDetails !== 'nil') {
+        const customer = decryptData(CoustomerDetails);
+        const amount = parseFloat(customer?.amount) || 0;
+        if (summary.hasOwnProperty(Status)) {
+          summary[Status] += (Status === "New Case" || Status === "Login Case") ? 1 : amount;
         }
       }
-    }
-    else {
-      console.log("no coustomer details found")
-    }
+    });
+    return summary;
+  }, [cases, PPass]);
 
-  });
+  const teamCasesSummary = useMemo(() => {
+    const summary = { "New Case": 0, "Login Case": 0, "Underwriting Case": 0, "Approved Case": 0, "Disbursed Case": 0, "Rejected Case": 0 };
+    
+    // Handle single object case
+    const amountMap = new Map();
+    if (teamCaseAmount && teamCaseAmount.caseId) {
+      amountMap.set(String(teamCaseAmount.caseId), parseFloat(teamCaseAmount.amount) || 0);
+    }
+    
+    
+    Object.values(appointedCases).flat().forEach(({ CaseId, Status }) => {
+      if (summary.hasOwnProperty(Status)) {
+        const amount = amountMap.get(String(CaseId)) || 0;
+        summary[Status] += (Status === "New Case" || Status === "Login Case") ? 1 : amount;
+      }
+    });
+    
+    return summary;
+  }, [appointedCases, teamCaseAmount]);
+
+  const renderSummaryCards = (summaryData) => (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      {Object.entries(summaryData).map(([status, total]) => (
+        <div key={status} className="bg-white/70 backdrop-blur-sm border border-orange-200 rounded-xl p-4 text-center shadow-md transition-transform duration-300 hover:-translate-y-1">
+          <h3 className="font-semibold text-gray-600 text-sm md:text-base">{status}</h3>
+          <p className="text-orange-600 font-bold text-xl md:text-2xl">
+            {status === "New Case" || status === "Login Case"
+              ? `${total}`
+              : `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </p>
+          {(status === "New Case" || status === "Login Case") && <span className="text-xs text-gray-500">Case{total !== 1 ? "s" : ""}</span>}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
       {loading ? (
-        <div className="relative">
-          <Loading />
-        </div>
+        <div className="relative"><Loading /></div>
       ) : (
         <div className="min-h-screen bg-gradient-to-br from-blue-200 via-white to-orange-100 text-gray-800 font-sans">
-          {/* Header */}
           <header className="bg-white/80 backdrop-blur-md shadow-lg p-4 flex justify-between items-center px-6 md:px-10 border-b-4 border-orange-500 sticky top-0 z-20">
             <div className="text-xl font-extrabold flex items-center">
-              <img
-                src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95"
-                alt="SOURCECORP"
-                className="h-12"
-              />
+              <img src="//img1.wsimg.com/isteam/ip/06a8fce5-3b35-48ef-9f0e-ab337ebd9cb8/blob-e8ec071.png/:/rs=h:87,cg:true,m/qt=q:95" alt="SOURCECORP" className="h-12" />
             </div>
-
             <div className="hidden md:flex flex-col items-center">
               <h1 className="text-3xl font-semibold text-orange-600">CRM</h1>
-              <div className="text-sm text-gray-600">
-                Logged in as: <span className="font-bold">{username}</span>
-              </div>
+              <div className="text-sm text-gray-600">Logged in as: <span className="font-bold">{username}</span></div>
             </div>
-
             <div className="flex items-center space-x-2 md:space-x-4">
               {username ? (
                 <>
-                  <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="relative bg-blue-500 text-white px-3 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-blue-400"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    {MarkCount > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{MarkCount}</span>
-                    )}
+                  <button onClick={() => setShowNotifications(!showNotifications)} className="relative bg-blue-500 text-white px-3 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-blue-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    {MarkCount > 0 && (<span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{MarkCount}</span>)}
                   </button>
-
-                  {isAdmin && (
-                    <button
-                      onClick={() => router.push("/adminpanel")}
-                      className="hidden md:inline-block bg-purple-500 text-white px-4 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-purple-400"
-                    >
-                      Admin Panel
-                    </button>
-                  )}
-                  <button
-                    onClick={handellogout}
-                    className="bg-red-500 text-white px-4 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-red-400"
-                  >
-                    Logout
-                  </button>
+                  {isAdmin && (<button onClick={() => router.push("/adminpanel")} className="hidden md:inline-block bg-purple-500 text-white px-4 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-purple-400">Admin Panel</button>)}
+                  <button onClick={handellogout} className="bg-red-500 text-white px-4 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-red-400">Logout</button>
                 </>
               ) : (
-                <button
-                  onClick={() => router.push("/login")}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-blue-400"
-                >
-                  Login
-                </button>
+                <button onClick={() => router.push("/login")} className="bg-blue-600 text-white px-6 py-2 rounded-full shadow-md transition-transform duration-300 hover:scale-105 focus:ring-2 focus:ring-blue-400">Login</button>
               )}
             </div>
           </header>
 
-          {/* Main Content */}
           <main className="p-4 md:p-8">
-            {/* Leaderboard Placeholder */}
             <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg shadow-lg p-4 mb-8 text-center">
               <h2 className="font-bold text-xl animate-pulse">Leaderboard Coming Soon!</h2>
             </div>
 
-            {/* Case Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-              {Object.entries(Summary).map(([status, total]) => (
-                <div key={status} className="bg-white/70 backdrop-blur-sm border border-orange-200 rounded-xl p-4 text-center shadow-md transition-transform duration-300 hover:-translate-y-1">
-                  <h3 className="font-semibold text-gray-600 text-sm md:text-base">{status}</h3>
-                  <p className="text-orange-600 font-bold text-xl md:text-2xl">
-                    {status === "New Case" || status === "Login Case"
-                      ? `${total}`
-                      : `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  </p>
-                  {(status === "New Case" || status === "Login Case") && <span className="text-xs text-gray-500">Case{total !== 1 ? "s" : ""}</span>}
-                </div>
-              ))}
-            </div>
-
-
-            {/* Notifications Panel */}
             {showNotifications && (
               <div className="fixed inset-0 bg-black/30 z-30" onClick={() => setShowNotifications(false)}>
                 <div className="absolute right-0 top-0 h-full bg-white shadow-2xl rounded-l-lg p-4 w-full max-w-md md:max-w-lg border-l-4 border-orange-500 transform transition-transform" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold text-orange-600">Notifications</h3>
-                    <button onClick={() => setShowNotifications(false)} className="p-2 rounded-full hover:bg-gray-200">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <button onClick={() => setShowNotifications(false)} className="p-2 rounded-full hover:bg-gray-200"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
                   </div>
                   <div className="flex items-center justify-between mb-4 text-sm">
                     <p className="text-gray-500">Last refreshed: {lastRefreshed}</p>
-                    <button onClick={handleNotifyRefresh} className="flex items-center gap-1 text-blue-600 hover:underline">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l16 16" /></svg>
-                      Refresh
-                    </button>
+                    <button onClick={handleNotifyRefresh} className="flex items-center gap-1 text-blue-600 hover:underline"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l16 16" /></svg>Refresh</button>
                   </div>
                   <div className="flex justify-center mb-4">
                     <button onClick={() => setViewCompleted(false)} className={`px-4 py-2 rounded-l-full ${!viewCompleted ? "bg-blue-600 text-white" : "bg-gray-300"}`}>Ongoing</button>
                     <button onClick={() => setViewCompleted(true)} className={`px-4 py-2 rounded-r-full ${viewCompleted ? "bg-blue-600 text-white" : "bg-gray-300"}`}>Completed</button>
                   </div>
-
                   <div className="max-h-[calc(100vh-12rem)] overflow-y-auto space-y-3 p-1">
                     {filteredNotifications.length > 0 ? (
                       filteredNotifications.map((note) => (
@@ -603,7 +484,6 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Case Management Section */}
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl p-4 md:p-6">
               <div className="flex justify-center mb-6">
                 <div className="relative flex p-1 bg-gray-200 rounded-full">
@@ -613,52 +493,27 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Your Cases View */}
+              {/* Conditionally render summary cards */}
+              {isyourcase ? renderSummaryCards(yourCasesSummary) : renderSummaryCards(teamCasesSummary)}
+
               <div className={`${isyourcase ? "block" : "hidden"}`}>
                 <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                  <button onClick={handelNewCase} className="bg-orange-500 text-white px-5 py-2 rounded-lg hover:bg-green-500 hover:text-black transition-colors shadow-md w-full md:w-auto">
-                    + Add New Case
-                  </button>
+                  <button onClick={handelNewCase} className="bg-orange-500 text-white px-5 py-2 rounded-lg hover:bg-green-500 hover:text-black transition-colors shadow-md w-full md:w-auto">+ Add New Case</button>
                   <select value={selectedMonthYear} onChange={(e) => setSelectedMonthYear(e.target.value)} className="px-4 py-2 rounded-lg border border-gray-300 w-full md:w-auto">
                     <option value="All">All Months</option>
-                    {[...new Set(cases
-                      .filter(c => c.CaseDate) // Filter out null/undefined dates
-                      .map(c => {
-                        try {
-                          const date = new Date(c.CaseDate);
-                          return isNaN(date) ? null : date.toISOString().substring(0, 7);
-                        } catch (e) {
-                          console.error('Invalid date:', c.CaseDate, e);
-                          return null;
-                        }
-                      })
-                      .filter(Boolean) // Remove any null values from invalid dates
-                    )]
-                      .sort((a, b) => new Date(b) - new Date(a)) // Sort dates in descending order
-                      .map(monthYear => (
-                        <option key={monthYear} value={monthYear}>
-                          {new Date(monthYear + "-02").toLocaleString("default", { month: "long", year: "numeric" })}
-                        </option>
-                      ))}
+                    {[...new Set(cases.filter(c => c.CaseDate).map(c => new Date(c.CaseDate).toISOString().substring(0, 7)))]
+                      .sort((a, b) => new Date(b) - new Date(a))
+                      .map(monthYear => (<option key={monthYear} value={monthYear}>{new Date(monthYear + "-02").toLocaleString("default", { month: "long", year: "numeric" })}</option>))}
                   </select>
                 </div>
                 <div className="mb-6 flex flex-wrap gap-2">
                   {["All", "New Case", "Login Case", "Underwriting Case", "Approved Case", "Disbursed Case", "Rejected Case"].map(status => (
-                    <button key={status} onClick={() => setFilter(status)} className={`px-3 py-1.5 text-sm rounded-full transition-colors ${filter === status ? "bg-blue-600 text-white" : "bg-gray-200 hover:bg-gray-300"}`}>
-                      {status}
-                    </button>
+                    <button key={status} onClick={() => setFilter(status)} className={`px-3 py-1.5 text-sm rounded-full transition-colors ${filter === status ? "bg-blue-600 text-white" : "bg-gray-200 hover:bg-gray-300"}`}>{status}</button>
                   ))}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead >
-                      <tr className="bg-gray-100 text-left text-sm font-semibold text-gray-600">
-                        <th className="p-3 rounded-l-lg">Case Name</th>
-                        <th className="p-3">Status</th>
-                        <th className="p-3">Date</th>
-                        <th className="p-3 rounded-r-lg">Action</th>
-                      </tr>
-                    </thead>
+                    <thead><tr className="bg-gray-100 text-left text-sm font-semibold text-gray-600"><th className="p-3 rounded-l-lg">Case Name</th><th className="p-3">Status</th><th className="p-3">Date</th><th className="p-3 rounded-r-lg">Action</th></tr></thead>
                     <tbody>
                       {filteredCases.length > 0 ? (
                         filteredCases.map((c, index) => (
@@ -666,76 +521,49 @@ export default function HomePage() {
                             <td className="p-3">{c.Name}</td>
                             <td className="p-3"><span className={`px-2 py-1 text-xs rounded-full ${c.Status === 'Approved Case' || c.Status === 'Disbursed Case' ? 'bg-green-100 text-green-800' : c.Status === 'Rejected Case' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{c.Status}</span></td>
                             <td className="p-3">{new Date(c.CaseDate).toLocaleDateString()}</td>
-                            <td className="p-3">
-                              {c.Name === "nil" ? (
-                                <button onClick={handelNewCase} className="bg-orange-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-500">Add New Case</button>
-                              ) : (
-                                <button onClick={() => handelViewCase(c)} className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">View Case</button>
-                              )}
-                            </td>
+                            <td className="p-3">{c.Name === "nil" ? (<button onClick={handelNewCase} className="bg-orange-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-500">Add New Case</button>) : (<button onClick={() => handelViewCase(c)} className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">View Case</button>)}</td>
                           </tr>
                         ))
-                      ) : (
-                        <tr><td colSpan="4" className="text-center p-8 text-gray-500">No cases found.</td></tr>
-                      )}
+                      ) : (<tr><td colSpan="4" className="text-center p-8 text-gray-500">No cases found.</td></tr>)}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* Team Cases View */}
               <div className={`${!isyourcase ? "block" : "hidden"}`}>
                 <h2 className="text-center text-xl font-semibold text-gray-700 mb-4">User Case Management</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <input type="text" placeholder="Search by name or email" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400" />
                   <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400">
                     <option value="all">All Users</option>
-                    {appointedUsers.map((user) => (
-                      <option key={user.ID} value={user.ID}>
-                        {user.Name}
-                      </option>
-                    ))}
+                    {appointedUsers.map((user) => (<option key={user.ID} value={user.ID}>{user.Name}</option>))}
                   </select>
                   <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="border p-2 rounded-md focus:ring-2 focus:ring-blue-400">
                     {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                   </select>
                 </div>
-
                 <div className="overflow-x-auto">
-                  {miniLoading ? (
-                    <div className="flex justify-center py-8"><MiniLoadingAnimation /></div>
-                  ) : (
+                  {miniLoading ? (<div className="flex justify-center py-8"><MiniLoadingAnimation /></div>) : (
                     <div className="space-y-4">
                       {filteredUsers.length > 0 ? (
                         filteredUsers.map((user) => (
                           <div key={`user-${user.ID}`} className="bg-gray-50 rounded-lg shadow-sm border">
-                            <div className="grid grid-cols-3 p-3 font-semibold bg-blue-100 rounded-t-lg">
-                              <div>{user.Name}</div>
-                              <div>{user.Email}</div>
-                              <div>{user.Role}</div>
-                            </div>
+                            <div className="grid grid-cols-3 p-3 font-semibold bg-blue-100 rounded-t-lg"><div>{user.Name}</div><div>{user.Email}</div><div>{user.Role}</div></div>
                             <div className="p-3">
                               {appointedCases[user.ID]?.length > 0 ? (
                                 <ul className="space-y-2">
-                                  {appointedCases[user.ID].map((c,index) => (
+                                  {appointedCases[user.ID].map((c, index) => (
                                     <li key={c.ID || `case-${index}`} className="flex justify-between items-center bg-white p-2 rounded-md shadow-sm">
-                                      <div>
-                                        <p className="font-semibold">{c.Name}</p>
-                                        <span className={`px-2 py-1 text-xs rounded-full ${c.Status === 'Approved Case' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{c.Status}</span>
-                                      </div>
+                                      <div><p className="font-semibold">{c.Name}</p><span className={`px-2 py-1 text-xs rounded-full ${c.Status === 'Approved Case' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{c.Status}</span></div>
                                       <button onClick={() => handelViewCase(c)} className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600">View</button>
                                     </li>
                                   ))}
                                 </ul>
-                              ) : (
-                                <p className="text-gray-500 text-center p-4">No cases assigned.</p>
-                              )}
+                              ) : (<p className="text-gray-500 text-center p-4">No cases assigned.</p>)}
                             </div>
                           </div>
                         ))
-                      ) : (
-                        <p className="text-center text-gray-500 p-8">No users found.</p>
-                      )}
+                      ) : (<p className="text-center text-gray-500 p-8">No users found.</p>)}
                     </div>
                   )}
                 </div>

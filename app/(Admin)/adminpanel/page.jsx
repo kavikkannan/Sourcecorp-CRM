@@ -1,15 +1,241 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import UserManagement from "@/components/UserManagement";
 import UserEditor from "@/components/UserEditor";
 import CaseManager from "@/components/CaseManager";
 import RegisterationPage from "@/components/registeration";
+import DecryptionDashboard from "@/components/DecryptionDashboard";
+import CryptoJS from 'crypto-js';
+const DecryptSection = () => {
+  const [cases, setCases] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchUserPassword = async (userId) => {
+    try {
+      const response = await fetch(`https://vfinserv.in/api/user/${userId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user ${userId}`);
+      }
+      const userData = await response.json();
+      return userData.PPass; // Return the password
+    } catch (error) {
+      console.error(`Error fetching user ${userId}:`, error);
+      return null;
+    }
+  };
+
+  const decryptData = (encryptedData,PPass) => {
+    try {
+      const bytes = CryptoJS.AES.decrypt(encryptedData, PPass);
+      const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+      return JSON.parse(decryptedText);
+    } catch (error) {
+      console.error("Decryption failed:", error);
+      return null;
+    }
+  };
+
+
+  useEffect(() => {
+    const fetchAndProcessCases = async () => {
+      try {
+        // First, fetch all cases
+        const response = await fetch('https://vfinserv.in/api/process_amounts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch cases');
+        }
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+          // For each case, fetch the user's password
+          const casesWithPasswords = await Promise.all(
+            data.data.map(async (caseItem) => {
+              const password = await fetchUserPassword(caseItem.agentId);
+              const d = decryptData(caseItem.encryptedData, password);
+              return {
+                ...caseItem,
+                status: 'pending',
+                password, // Store the password with the case
+                decryptedData: d.amount
+              };
+            })
+          );
+          console.log(casesWithPasswords);
+          setCases(casesWithPasswords);
+        } else {
+          throw new Error(data.message || 'Failed to load cases');
+        }
+      } catch (err) {
+        console.error('Error fetching cases:', err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAndProcessCases();
+  }, []);
+
+  const updateCaseAmounts = async (cases) => {
+    try {
+      const updates = cases.map(caseItem => ({
+        PIndex: caseItem.pindex,
+        CaseID: caseItem.caseId,
+        Amount: parseFloat(caseItem.decryptedData) || 0
+      }));
+
+      // Filter out cases without decrypted data
+      const validUpdates = updates.filter(item => item.Amount > 0);
+
+      if (validUpdates.length === 0) {
+        console.log('No valid cases to update');
+        return { success: false, message: 'No valid cases to update' };
+      }
+
+      // Send each update to the API
+      const results = await Promise.all(
+        validUpdates.map(update =>
+          fetch('https://vfinserv.in/case/amount', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(update)
+          })
+          .then(response => response.json())
+          .then(data => ({
+            caseId: update.CaseID,
+            success: data.success,
+            message: data.message || 'Updated successfully'
+          }))
+          .catch(error => ({
+            caseId: update.CaseID,
+            success: false,
+            message: error.message
+          }))
+        )
+      );
+
+      // Update the UI with the results
+      setCases(prevCases => 
+        prevCases.map(c => {
+          const result = results.find(r => r.caseId === c.caseId);
+          if (!result) return c;
+          
+          return {
+            ...c,
+            status: result.success ? 'completed' : 'error',
+            updateStatus: result
+          };
+        })
+      );
+
+      return {
+        success: results.every(r => r.success),
+        results
+      };
+    } catch (error) {
+      console.error('Error updating case amounts:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to update case amounts'
+      };
+    }
+  };
+
+  // Call this function after fetchAndProcessCases completes
+  useEffect(() => {
+    if (cases.length > 0 && cases.every(c => c.status === 'pending' && c.decryptedData)) {
+      updateCaseAmounts(cases);
+    }
+  }, [cases]);
+
+  const handleDecrypt = async (caseItem) => {
+    try {
+      if (!caseItem.password) {
+        throw new Error('No password available for this case');
+      }
+      
+      // Decrypt the data using the stored password
+      const decryptedData = decryptData(caseItem.encryptedData, caseItem.password);
+      
+      // Update the case with decrypted data
+      setCases(prevCases => 
+        prevCases.map(c => 
+          c.caseId === caseItem.caseId 
+            ? { 
+                ...c, 
+                status: 'decrypted', 
+                decryptedData,
+                decryptedAt: new Date().toISOString()
+              }
+            : c
+        )
+      );
+      
+      console.log('Decrypted data for case', caseItem.caseId, ':', decryptedData);
+      return { success: true, decryptedData };
+      
+    } catch (error) {
+      console.error('Decryption error for case', caseItem.caseId, ':', error);
+      
+      // Update the case with error status
+      setCases(prevCases => 
+        prevCases.map(c => 
+          c.caseId === caseItem.caseId 
+            ? { 
+                ...c, 
+                status: 'error', 
+                error: error.message 
+              }
+            : c
+        )
+      );
+      
+      return { 
+        success: false, 
+        error: error.message || 'Failed to decrypt case' 
+      };
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-red-500 bg-red-50 rounded-lg">
+        Error: {error}
+      </div>
+    );
+  }
+
+  return (
+    <DecryptionDashboard 
+      cases={cases}
+      onDecrypt={(caseItem) => handleDecrypt(caseItem)}
+    />
+  );
+};
 
 const COMPONENTS = {
   usermanagement: <UserManagement />,
   usereditor: <UserEditor />,
   casemanager: <CaseManager />,
   registeration: <RegisterationPage />,
+  decrypt: <DecryptSection />,
 };
 
 export default function AdminPanel() {
@@ -29,6 +255,11 @@ export default function AdminPanel() {
     ),
     registeration: (
       <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+    ),
+    decrypt: (
+      <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      </svg>
     ),
   };
 
@@ -97,6 +328,12 @@ export default function AdminPanel() {
             onClick={() => { setSelected("registeration"); setSidebarOpen(false); }}
           >
             {icons.registeration} Registeration
+          </button>
+          <button
+            className={`flex items-center text-left px-4 py-3 rounded-md font-medium transition-colors duration-200 ${selected === "decrypt" ? "bg-gray-100 text-gray-900 shadow-sm" : "text-gray-600 hover:bg-gray-50 hover:text-gray-800"}`}
+            onClick={() => { setSelected("decrypt"); setSidebarOpen(false); }}
+          >
+            {icons.decrypt} Data Decryption
           </button>
         </nav>
       </aside>
