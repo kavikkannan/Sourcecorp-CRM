@@ -7,75 +7,40 @@ import CryptoJS from "crypto-js";
 import Loading from "@/components/Loading";
 import MiniLoadingAnimation from "./MiniLoading";
 import { fetchWithFallback } from "../utils/api";
+import { motion } from "framer-motion";
 import BirthdayGreetingOverlay from "./BirthdayGreetingOverlay";
-const BirthdayConfetti = () => {
-  const particleCount = 40;
-  const colors = ["#d4af37", "#c0c0c0", "#ffffff", "#89cff0", "#f4a261", "#e76f51"];
-  const shapes = ["🎂", "🎉", "🎈"];
+const CakeButton = ({ onClick }) => {
+  const firecrackerCount = 12;
+  const radius = 60;
 
   return (
-    <div className="fixed inset-0 w-full h-full pointer-events-none z-[9999] overflow-hidden">
-      {Array.from({ length: particleCount }).map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: '-10%',
-            fontSize: `${Math.random() * 24 + 16}px`,
-            color: colors[Math.floor(Math.random() * colors.length)],
-          }}
-          animate={{
-            y: "110vh",
-            x: `${Math.random() * 80 - 40}px`,
-            rotate: Math.random() * 360,
-          }}
-          transition={{
-            duration: Math.random() * 10 + 8,
-            delay: Math.random() * 10,
-            repeat: Infinity,
-            repeatType: "loop",
-            ease: "linear",
-          }}
-        >
-          {shapes[i % shapes.length]}
-        </motion.div>
-      ))}
-    </div>
+      <motion.button
+          onClick={onClick}
+          className="fixed bottom-5 left-5 w-20 h-20 rounded-full bg-pink-500/80 backdrop-blur-sm flex items-center justify-center text-4xl z-50 shadow-lg"
+          whileHover={{ scale: 1.1, boxShadow: "0 0 30px #d4af37" }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: 'spring', stiffness: 300 }}
+      >
+          {Array.from({ length: firecrackerCount }).map((_, i) => {
+              const angle = (i / firecrackerCount) * 360;
+              const x = radius * Math.cos((angle * Math.PI) / 180);
+              const y = radius * Math.sin((angle * Math.PI) / 180);
+
+              return (
+                  <motion.div
+                      key={i}
+                      className="absolute w-2 h-2 bg-yellow-300 rounded-full"
+                      style={{ top: '50%', left: '50%', translateX: '-50%', translateY: '-50%' }}
+                      animate={{ x: [0, x], y: [0, y], opacity: [1, 0], scale: [1, 0.5] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1, ease: "easeOut" }}
+                  />
+              );
+          })}
+          🎂
+      </motion.button>
   );
 };
 
-const CakeButton = ({ onClick }) => {
-    const firecrackerCount = 12;
-    const radius = 60;
-
-    return (
-        <motion.button
-            onClick={onClick}
-            className="fixed bottom-5 left-5 w-20 h-20 rounded-full bg-pink-500/80 backdrop-blur-sm flex items-center justify-center text-4xl z-50 shadow-lg"
-            whileHover={{ scale: 1.1, boxShadow: "0 0 30px #d4af37" }}
-            whileTap={{ scale: 0.9 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-        >
-            {Array.from({ length: firecrackerCount }).map((_, i) => {
-                const angle = (i / firecrackerCount) * 360;
-                const x = radius * Math.cos((angle * Math.PI) / 180);
-                const y = radius * Math.sin((angle * Math.PI) / 180);
-
-                return (
-                    <motion.div
-                        key={i}
-                        className="absolute w-2 h-2 bg-yellow-300 rounded-full"
-                        style={{ top: '50%', left: '50%', translateX: '-50%', translateY: '-50%' }}
-                        animate={{ x: [0, x], y: [0, y], opacity: [1, 0], scale: [1, 0.5] }}
-                        transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1, ease: "easeOut" }}
-                    />
-                );
-            })}
-            🎂
-        </motion.button>
-    );
-};
 export default function HomePage() {
   const [username, setUser] = useState(null);
   const [cases, setCases] = useState([]);
@@ -100,8 +65,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [miniLoading, setMiniLoading] = useState(false);
   const [teamCaseAmount, setTeamCaseAmount] = useState([]);
-  const [showBirthdayGreeting, setShowBirthdayGreeting] = useState(false); // State for birthday overlay
-
+  const [showBirthdayGreeting, setShowBirthdayGreeting] = useState(false)
   const [viewCompleted, setViewCompleted] = useState(false); // false = Ongoing
   const filteredNotifications = notifications.filter(
     (note) => note.ReadStatus === viewCompleted
@@ -138,7 +102,14 @@ export default function HomePage() {
       const response = await fetchWithFallback(`/api/fetch_amount`);
       
       if (response && Array.isArray(response)) {
+        // Set the array of case amounts if you need to use individual amounts
         setTeamCaseAmount(response);
+        
+        // Calculate total amount if needed
+        const total = response.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        
+        // If you want to store the total in state
+        // setTotalAmount(total);
       } else if (response && response.error) {
         console.error("Error from server:", response.error);
       } else {
@@ -249,7 +220,13 @@ export default function HomePage() {
       });
 
       if (response) {
-        sessionStorage.clear();
+        sessionStorage.removeItem("PPass");
+        sessionStorage.removeItem("isAdmin");
+        sessionStorage.removeItem("loggedinemail");
+        sessionStorage.removeItem("loggedinnumber");
+        sessionStorage.removeItem("nofi");
+        sessionStorage.removeItem("userId");
+        sessionStorage.removeItem("username");
         router.push("/login");
       } else {
         console.error("Logout failed");
@@ -447,6 +424,7 @@ export default function HomePage() {
   const teamCasesSummary = useMemo(() => {
     const summary = { "New Case": 0, "Login Case": 0, "Underwriting Case": 0, "Approved Case": 0, "Disbursed Case": 0, "Rejected Case": 0 };
     
+    // Create a map of caseId to amount from teamCaseAmount array
     const amountMap = new Map();
     if (Array.isArray(teamCaseAmount)) {
       teamCaseAmount.forEach(({ caseId, amount }) => {
@@ -456,9 +434,11 @@ export default function HomePage() {
       });
     }
     
+    // Process appointed cases and accumulate amounts
     Object.values(appointedCases).flat().forEach(({ CaseId, Status }) => {
       if (summary.hasOwnProperty(Status)) {
         const amount = amountMap.get(String(CaseId)) || 0;
+        // For New/Login cases, count as 1, for others add the amount
         summary[Status] += (Status === "New Case" || Status === "Login Case") ? 1 : amount;
       }
     });
@@ -484,8 +464,6 @@ export default function HomePage() {
 
   return (
     <>
-      <CakeButton onClick={() => setShowBirthdayGreeting(true)} />
-      <BirthdayGreetingOverlay isVisible={showBirthdayGreeting} onClose={() => setShowBirthdayGreeting(false)} />
       {loading ? (
         <div className="relative"><Loading /></div>
       ) : (
@@ -515,6 +493,8 @@ export default function HomePage() {
           </header>
 
           <main className="p-4 md:p-8">
+            <CakeButton onClick={() => setShowBirthdayGreeting(!showBirthdayGreeting)} />
+            <BirthdayGreetingOverlay isVisible1={showBirthdayGreeting} />
             <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg shadow-lg p-4 mb-8 text-center">
               <h2 className="font-bold text-xl animate-pulse">Leaderboard Coming Soon!</h2>
             </div>
@@ -566,6 +546,7 @@ export default function HomePage() {
                 </div>
               </div>
 
+              {/* Conditionally render summary cards */}
               {isyourcase ? renderSummaryCards(yourCasesSummary) : renderSummaryCards(teamCasesSummary)}
 
               <div className={`${isyourcase ? "block" : "hidden"}`}>
@@ -647,4 +628,3 @@ export default function HomePage() {
     </>
   );
 }
-

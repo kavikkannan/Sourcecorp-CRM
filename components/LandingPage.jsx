@@ -94,7 +94,7 @@ const LandingPage = () => {
 
   return (
     <div className="relative bg-gradient-to-br from-blue-50 via-white to-orange-50 text-gray-800 font-sans">
-         <BirthdayGreetingOverlay/>
+         <BirthdayGreetingOverlay isVisible1={true}/>
        {/* Sparkles Background - Added Back In */}
         <div className="absolute inset-0 pointer-events-none z-0">
             <SparklesCore

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
-import BirthdayConfettiCore from "./BirthdayConfettiCore"; // Assuming SparklesCore component is in the same directory
+import BirthdayConfettiCore from "./bir"; // Assuming SparklesCore component is in the same directory
 // --- HELPER COMPONENTS ---
 // --- HELPER COMPONENTS ---
 const Icon = ({ path, className = "w-6 h-6" }) => (
@@ -92,8 +92,8 @@ const ParallaxImageCard = ({ src, index, title, description, onInView }) => {
 
 // --- MAIN BIRTHDAY GREETING OVERLAY COMPONENT ---
 
-const BirthdayGreetingOverlay = () => {
-  const [isVisible, setIsVisible] = useState(true);
+const BirthdayGreetingOverlay = ({ isVisible1 }) => {
+  const [isVisible, setIsVisible] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmutePrompt, setShowUnmutePrompt] = useState(true);
   const [hasAudioBeenInitiated, setHasAudioBeenInitiated] = useState(false);
@@ -106,6 +106,10 @@ const BirthdayGreetingOverlay = () => {
   const personalizedMessage = `"Your dedication and strategic vision are the bedrock of our success. Wishing you a fantastic year ahead, filled with continued achievements."`;
   const ceoName = "The CTO";
   
+  useEffect(() => {
+    setIsVisible(isVisible1);
+  }, [isVisible1]);
+
   const employeePhotos = [
     '/images/memories6.jpg',
     '/images/memories2.jpg',
