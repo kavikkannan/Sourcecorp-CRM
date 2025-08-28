@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
-import BirthdayConfettiCore from "./bir"; // Assuming SparklesCore component is in the same directory
+import BirthdayConfettiCore from "./BirthdayConfettiCore"; // Assuming SparklesCore component is in the same directory
 // --- HELPER COMPONENTS ---
 // --- HELPER COMPONENTS ---
 const Icon = ({ path, className = "w-6 h-6" }) => (
