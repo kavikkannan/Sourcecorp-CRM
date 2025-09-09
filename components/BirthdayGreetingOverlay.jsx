@@ -24,18 +24,25 @@ const ParallaxImageCard = ({ src, index, title, description, onInView }) => {
 
   const smoothOptions = { damping: 30, stiffness: 200, restDelta: 0.001 };
   const imageOpacity = useSpring(
-    useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [1, 1, 1, 1]),
-    smoothOptions
+    useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0.8, 1, 1, 0.8]),
+    { ...smoothOptions, mass: 0.1 }
   );
+  
   const scale = useSpring(
-    useTransform(scrollYProgress, [0, 0.5, 1], [1.05, 1, 0.95]),
-    smoothOptions
+    useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.1, 1.05, 1.05, 1]),
+    { ...smoothOptions, stiffness: 300 }
   );
 
-  // Disable Y movement on small screens
+  // Enhanced parallax effect with spring physics
   const y = useSpring(
-    useTransform(scrollYProgress, [0, 1], ["10%", "-10%"]),
-    smoothOptions
+    useTransform(scrollYProgress, [0, 1], ["5%", "-5%"]),
+    { ...smoothOptions, damping: 15, stiffness: 150 }
+  );
+  
+  // Add subtle rotation on scroll
+  const rotate = useSpring(
+    useTransform(scrollYProgress, [0, 1], [-2, 2]),
+    { ...smoothOptions, stiffness: 100 }
   );
 
   const isReversed = index % 2 !== 0;
@@ -48,13 +55,45 @@ const ParallaxImageCard = ({ src, index, title, description, onInView }) => {
       }`}
     >
       {/* Image */}
-      <div className="md:w-1/2 w-full h-[40vh] md:h-[60vh] flex justify-center items-center relative z-0">
-        <motion.img
-          src={src}
-          alt={title}
-          className="rounded-xl shadow-2xl object-cover w-[90%] md:w-[80%] h-full"
-          style={{ opacity: imageOpacity, scale, y }}
-        />
+      <div className="md:w-1/2 w-full h-[40vh] md:h-[60vh] flex justify-center items-center relative z-0 overflow-hidden">
+        <motion.div
+          className="relative w-[90%] md:w-[80%] h-full rounded-xl overflow-hidden"
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          whileInView={{ 
+            opacity: 1, 
+            scale: 1, 
+            y: 0,
+            transition: { 
+              duration: 0.8,
+              ease: [0.2, 0.8, 0.2, 1]
+            }
+          }}
+          viewport={{ once: false, amount: 0.4 }}
+        >
+          <motion.img
+            src={src}
+            alt={title}
+            className="w-full h-full object-cover rounded-xl shadow-2xl"
+            style={{ 
+              opacity: imageOpacity, 
+              scale: scale,
+              y: y,
+              transformOrigin: 'center center',
+              willChange: 'transform, opacity'
+            }}
+            initial={{ scale: 1.1 }}
+            whileHover={{
+              scale: 1.05,
+              transition: { duration: 0.3, ease: 'easeInOut' }
+            }}
+          />
+          <motion.div 
+            className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent rounded-xl"
+            initial={{ opacity: 0.5 }}
+            whileHover={{ opacity: 0.2 }}
+            transition={{ duration: 0.3 }}
+          />
+        </motion.div>
       </div>
 
       {/* Text */}
@@ -111,7 +150,7 @@ const BirthdayGreetingOverlay = ({ isVisible1 }) => {
   }, [isVisible1]);
 
   const employeePhotos = [
-    '/images/memories6.jpg',
+    '/images/memories1.jpg',
     '/images/memories2.jpg',
     '/images/memories3.jpg',
     '/images/memories4.jpg'
@@ -119,10 +158,10 @@ const BirthdayGreetingOverlay = ({ isVisible1 }) => {
 
   // New array for the titles corresponding to each image
   const galleryTitles = [
-    "A Great Leader",
-    "An Inspiring Mentor",
-    "A True Visionary",
-    "A Wonderful Colleague"
+    "The Heart of SourceCorp",
+    "Our Guiding Mentor",
+    "A Pillar of Strength and Compassion",
+    "The Architect of Our Success"
   ];
 
   useEffect(() => {
@@ -199,13 +238,13 @@ const BirthdayGreetingOverlay = ({ isVisible1 }) => {
         {/* --- HERO SECTION --- */}
         <section className="h-screen flex flex-col justify-center items-center text-center p-8 relative">
           <motion.div className="flex flex-col items-center" initial="hidden" animate="visible" transition={{ staggerChildren: 0.3, delayChildren: 0.5 }}>
-            <motion.img src="/sourcecorp-card-logo(1).png" alt={employeeName} className="w-48 h-48 rounded-full object-cover border-4 border-[#d4af37]" style={{ boxShadow: '0 0 40px #d4af37, 0 0 60px #d4af37' }} variants={wordVariants}/>
+            <motion.img src="/images/birthday.jpg" alt={employeeName} className="w-[50vh] h-[50vh] rounded-full object-cover border-4 border-[#d4af37]" style={{ boxShadow: '0 0 40px #d4af37, 0 0 60px #d4af37' }} variants={wordVariants}/>
             
-            <motion.h1 variants={{ visible: { transition: { staggerChildren: 0.08 } } }} className="text-5xl md:text-7xl font-extrabold mt-8 bg-gradient-to-r from-gray-100 via-white to-gray-300 text-transparent bg-clip-text" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.7))' }}>
+            {/* <motion.h1 variants={{ visible: { transition: { staggerChildren: 0.08 } } }} className="text-5xl md:text-7xl font-extrabold mt-8 bg-gradient-to-r from-gray-100 via-white to-gray-300 text-transparent bg-clip-text" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.7))' }}>
               {headlineText.split(' ').map((word, index) => (
                 <motion.span key={index} variants={wordVariants} className="inline-block mr-4 mb-4">{word}</motion.span>
               ))}
-            </motion.h1>
+            </motion.h1> */}
 
             <motion.p variants={wordVariants} className="mt-4 text-xl md:text-2xl text-gray-300 max-w-2xl font-light">
               From the entire team at {companyName}
@@ -223,11 +262,10 @@ const BirthdayGreetingOverlay = ({ isVisible1 }) => {
       index={index} 
       title={galleryTitles[index]} 
       description={
-        index === 0 ? 'You don\'t just manage; you inspire and empower everyone around you to achieve their best. Your guidance has been invaluable to our team\'s success.' :
-        index === 1 ? 'Your door has always been open, and your advice has been a guiding light for so many of us. Thank you for investing in our growth and development.' :
-        index === 2 ? 'You have a remarkable ability to see the bigger picture and steer us toward the future. Your innovative ideas constantly push us to new heights.' :
-        'Your positive attitude and collaborative spirit make the workplace a better and more enjoyable environment for everyone. It\'s a true pleasure working alongside you.'
-      }
+        index === 0 ? 'She shaped our professional careers and projects through her profound wisdom and dedication.She nurtured the entire team with compassionate leadership and genuine care, acting as its very soul.' :
+        index === 1 ? 'She shaped our professional careers and projects through her profound wisdom and dedication.She nurtured the entire team with compassionate leadership and genuine care, acting as its very soul.' :
+        index === 2 ? 'Her unwavering support and kindness made everyone feel valued and secure, serving as a pillar of strength.She designed and guided the path forward with a clear vision, acting as the true architect of the team\'s success.' :
+'She leaves behind a powerful legacy defined by strength, kindness, and inspiration.We express our deepest gratitude for her unforgettable and lasting impact on us all.'      }
       onInView={setCurrentTitle}
     />
   ))}
