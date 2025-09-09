@@ -426,7 +426,7 @@ export default function ViewCase() {
     setUserID(userid);
 
     if (activeTab === "tasks" && assignedTo) {
-      handleSchedule(userid, assignedTo, name, input, caseData.PIndex);
+      handleSchedule(userid, assignedTo, name, input, caseData.PIndex, caseData.Name, caseData.AgentId);
     }
 
     const newEntry =
@@ -456,7 +456,9 @@ export default function ViewCase() {
     toUser,
     tousername,
     note,
-    casePfile
+    casePfile,
+    caseName,
+    caseAgentId
   ) => {
     try {
       const mark = false;
@@ -474,6 +476,8 @@ export default function ViewCase() {
           tousername,
           note,
           casePfile,
+          caseName,
+          caseAgentId,
           mark: mark === "true",
           readStatus: readStatus === "true",
         }),

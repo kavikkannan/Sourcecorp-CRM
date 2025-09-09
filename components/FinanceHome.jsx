@@ -172,7 +172,7 @@ export default function HomePage() {
       }
       
       try {
-        const userData = await fetchWithFallback(`/api/user/${parseInt(NData.FromUser)}`);
+        const userData = await fetchWithFallback(`/api/user/${parseInt(NData.caseAgentId)}`);
         if (userData) {
           sessionStorage.setItem("CasePPass", userData.PPass);
         } else {
