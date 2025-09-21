@@ -493,8 +493,8 @@ export default function HomePage() {
           </header>
 
           <main className="p-4 md:p-8">
-            <CakeButton onClick={() => setShowBirthdayGreeting(!showBirthdayGreeting)} />
-            <BirthdayGreetingOverlay isVisible1={showBirthdayGreeting} />
+           {/*  <CakeButton onClick={() => setShowBirthdayGreeting(!showBirthdayGreeting)} />
+            <BirthdayGreetingOverlay isVisible1={showBirthdayGreeting} /> */}
             <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg shadow-lg p-4 mb-8 text-center">
               <h2 className="font-bold text-xl animate-pulse">Leaderboard Coming Soon!</h2>
             </div>
